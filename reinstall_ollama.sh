@@ -17,35 +17,54 @@ echo "📥 Переустановка Ollama..."
 # Определяем архитектуру
 ARCH=$(uname -m)
 if [ "$ARCH" = "x86_64" ]; then
-    # Пробуем несколько URL-ов
-    URLS=(
-        "https://github.com/ollama/ollama/releases/download/v0.3.12/ollama-linux-amd64"
-        "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64"
-        "https://github.com/ollama/ollama/releases/download/v0.3.11/ollama-linux-amd64"
-    )
+    # Актуальные URL для загрузки Ollama
+    OLLAMA_VERSION="v0.12.3"
+    OLLAMA_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tgz"
 else
     echo "❌ Неподдерживаемая архитектура: $ARCH"
     exit 1
 fi
 
-# Пробуем скачать с разных URL
-for url in "${URLS[@]}"; do
-    echo "🔄 Пробуем загрузить с: $url"
+# Скачиваем и распаковываем Ollama
+echo "🔄 Загружаем Ollama ${OLLAMA_VERSION}..."
+
+if curl -L --fail --silent --show-error "$OLLAMA_URL" -o "/tmp/ollama.tgz"; then
+    echo "� Распаковываем архив..."
     
-    if curl -L --fail --silent --show-error "$url" -o "$HOME/.local/bin/ollama"; then
+    # Распаковываем в временную директорию
+    mkdir -p /tmp/ollama_extract
+    if tar -xzf /tmp/ollama.tgz -C /tmp/ollama_extract; then
+        # Ищем исполняемый файл ollama
+        if [ -f "/tmp/ollama_extract/bin/ollama" ]; then
+            cp "/tmp/ollama_extract/bin/ollama" "$HOME/.local/bin/ollama"
+        elif [ -f "/tmp/ollama_extract/ollama" ]; then
+            cp "/tmp/ollama_extract/ollama" "$HOME/.local/bin/ollama"
+        else
+            echo "❌ Не найден исполняемый файл ollama в архиве"
+            ls -la /tmp/ollama_extract/
+            exit 1
+        fi
+        
         # Проверяем, что файл корректный
         if file "$HOME/.local/bin/ollama" | grep -q "ELF.*executable"; then
             chmod +x "$HOME/.local/bin/ollama"
-            echo "✅ Ollama успешно загружен!"
-            break
+            echo "✅ Ollama успешно установлен!"
         else
-            echo "⚠️  Файл не является исполняемым, пробуем следующий URL..."
-            rm -f "$HOME/.local/bin/ollama"
+            echo "❌ Файл не является исполняемым"
+            file "$HOME/.local/bin/ollama"
+            exit 1
         fi
+        
+        # Очищаем временные файлы
+        rm -rf /tmp/ollama_extract /tmp/ollama.tgz
     else
-        echo "⚠️  Не удалось загрузить с этого URL, пробуем следующий..."
+        echo "❌ Не удалось распаковать архив"
+        exit 1
     fi
-done
+else
+    echo "❌ Не удалось загрузить Ollama"
+    exit 1
+fi
 
 # Финальная проверка
 if [ ! -f "$HOME/.local/bin/ollama" ]; then

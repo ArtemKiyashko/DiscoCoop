@@ -60,34 +60,58 @@ if ! command -v ollama &> /dev/null; then
     mkdir -p "$HOME/.local/bin"
     mkdir -p "$HOME/.ollama"
     
-    # Определяем архитектуру
+    # Определяем архитектуру и версию
     ARCH=$(uname -m)
     if [ "$ARCH" = "x86_64" ]; then
-        OLLAMA_URL="https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64"
+        OLLAMA_VERSION="v0.12.3"
+        OLLAMA_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tgz"
     else
         echo "❌ Неподдерживаемая архитектура: $ARCH"
         exit 1
     fi
     
-    # Скачиваем Ollama
-    echo "📥 Загрузка Ollama..."
-    if curl -L "$OLLAMA_URL" -o "$HOME/.local/bin/ollama"; then
-        # Проверяем, что скачался правильный файл
-        if file "$HOME/.local/bin/ollama" | grep -q "ELF.*executable"; then
-            chmod +x "$HOME/.local/bin/ollama"
-            
-            # Добавляем в PATH
-            export PATH="$HOME/.local/bin:$PATH"
-            if ! grep -q "export PATH.*\.local/bin" ~/.bashrc; then
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+    # Скачиваем и устанавливаем Ollama
+    echo "📥 Загрузка Ollama ${OLLAMA_VERSION}..."
+    if curl -L "$OLLAMA_URL" -o "/tmp/ollama.tgz"; then
+        echo "📦 Распаковка архива..."
+        
+        # Создаем временную директорию
+        mkdir -p /tmp/ollama_extract
+        
+        if tar -xzf /tmp/ollama.tgz -C /tmp/ollama_extract; then
+            # Ищем исполняемый файл
+            if [ -f "/tmp/ollama_extract/bin/ollama" ]; then
+                cp "/tmp/ollama_extract/bin/ollama" "$HOME/.local/bin/ollama"
+            elif [ -f "/tmp/ollama_extract/ollama" ]; then
+                cp "/tmp/ollama_extract/ollama" "$HOME/.local/bin/ollama"
+            else
+                echo "❌ Не найден исполняемый файл в архиве"
+                rm -rf /tmp/ollama_extract /tmp/ollama.tgz
+                exit 1
             fi
             
-            echo "✅ Ollama установлен в $HOME/.local/bin/ollama"
+            # Проверяем корректность файла
+            if file "$HOME/.local/bin/ollama" | grep -q "ELF.*executable"; then
+                chmod +x "$HOME/.local/bin/ollama"
+                
+                # Добавляем в PATH
+                export PATH="$HOME/.local/bin:$PATH"
+                if ! grep -q "export PATH.*\.local/bin" ~/.bashrc; then
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+                fi
+                
+                echo "✅ Ollama установлен в $HOME/.local/bin/ollama"
+            else
+                echo "❌ Файл не является исполняемым"
+                rm -f "$HOME/.local/bin/ollama"
+                exit 1
+            fi
+            
+            # Очищаем временные файлы
+            rm -rf /tmp/ollama_extract /tmp/ollama.tgz
         else
-            echo "❌ Скачанный файл поврежден или неправильный"
-            echo "🔍 Содержимое файла:"
-            head -5 "$HOME/.local/bin/ollama"
-            rm -f "$HOME/.local/bin/ollama"
+            echo "❌ Не удалось распаковать архив"
+            rm -f /tmp/ollama.tgz
             exit 1
         fi
     else

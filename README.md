@@ -179,7 +179,9 @@ curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/reins
 ```bash
 rm -f ~/.local/bin/ollama
 mkdir -p ~/.local/bin
-curl -L https://github.com/ollama/ollama/releases/download/v0.3.12/ollama-linux-amd64 -o ~/.local/bin/ollama
+curl -L https://github.com/ollama/ollama/releases/download/v0.12.3/ollama-linux-amd64.tgz -o /tmp/ollama.tgz
+tar -xzf /tmp/ollama.tgz -C /tmp/
+cp /tmp/bin/ollama ~/.local/bin/ollama  # или /tmp/ollama если структура другая
 chmod +x ~/.local/bin/ollama
 export PATH="$HOME/.local/bin:$PATH"
 ```
