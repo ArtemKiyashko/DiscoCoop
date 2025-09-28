@@ -1,19 +1,7 @@
 #!/bin/bash
 
 # Скрипт запуска Disco Coop Bot
-# Совмеmajor_version = int(version.split('.')[0])
-if major_version < 22:
-    print('')
-    print('❌ КРИТИЧЕСКАЯ ОШИБКА: Устаревшая версия python-telegram-bot!')
-    print(f'   Ожидается: 22.x, найдена: {version}')
-    print('')
-    print('🔧 Для исправления запустите:')
-    print('   pip install \"python-telegram-bot>=22.0,<23.0\" --upgrade')
-    print('')
-    import sys
-    sys.exit(1)
-else:
-    print(f'✅ Версия telegram бота корректная: {version}')ython-telegram-bot 13.15
+# Совместимость с python-telegram-bot 22.x
 
 set -e
 
@@ -62,19 +50,24 @@ python3 -c "
 import telegram
 version = telegram.__version__
 print(f'📦 Версия python-telegram-bot: {version}')
-if not version.startswith('13.'):
+major_version = int(version.split('.')[0])
+if major_version < 22:
     print('')
-    print('❌ КРИТИЧЕСКАЯ ОШИБКА: Неправильная версия python-telegram-bot!')
-    print('   Ожидается: 13.15, найдена:', version)
+    print('❌ КРИТИЧЕСКАЯ ОШИБКА: Устаревшая версия python-telegram-bot!')
+    print(f'   Ожидается: 22.x, найдена: {version}')
     print('')
-    print('� Для исправления запустите:')
-    print('   ./fix_pynput.sh')
+    print('🔧 Для исправления запустите:')
+    print('   pip install \"python-telegram-bot>=22.0,<23.0\" --upgrade')
     print('')
     import sys
     sys.exit(1)
 else:
-    print('✅ Версия telegram бота корректная')
+    print(f'✅ Версия telegram бота корректная: {version}')
 "
+
+if [ $? -ne 0 ]; then
+    exit 1
+fi
 
 # Проверяем опциональные зависимости (для игрового контроллера)
 echo "🔍 Проверка игрового контроллера..."
