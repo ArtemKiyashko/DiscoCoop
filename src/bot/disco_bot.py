@@ -302,19 +302,25 @@ class DiscoCoopBot:
             del self.active_sessions[chat_id]
             logger.info(f"Session expired for chat {chat_id}")
     
-    async def run(self):
-        """Запуск бота"""
+    def run(self):
+        """Запуск бота (синхронный метод)"""
         logger.info("🚀 Запуск Disco Coop Bot...")
         logger.info(f"📡 Авторизованные чаты: {self.config.telegram.allowed_chats}")
         
-        # Запускаем периодическую очистку сессий
-        async def cleanup_task():
-            while True:
-                await asyncio.sleep(300)  # Каждые 5 минут
-                await self.cleanup_sessions()
+        # Добавляем callback для запуска фоновых задач
+        async def post_init(application):
+            """Callback после инициализации приложения"""
+            # Запускаем фоновую задачу очистки сессий
+            asyncio.create_task(self._cleanup_task())
         
-        # Запускаем фоновую задачу
-        asyncio.create_task(cleanup_task())
+        # Регистрируем callback
+        self.application.post_init = post_init
         
-        # Запускаем бота (новый API версии 20.x)
-        await self.application.run_polling(drop_pending_updates=True)
+        # Запускаем бота (run_polling сам управляет event loop)
+        self.application.run_polling(drop_pending_updates=True)
+    
+    async def _cleanup_task(self):
+        """Фоновая задача очистки сессий"""
+        while True:
+            await asyncio.sleep(300)  # Каждые 5 минут
+            await self.cleanup_sessions()

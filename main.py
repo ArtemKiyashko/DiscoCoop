@@ -15,7 +15,7 @@ from src.utils.config import Config
 from src.bot.disco_bot import DiscoCoopBot
 
 
-async def main():
+def main():
     """Основная функция"""
     print("🎮 Disco Coop - Кооперативная игра в Disco Elysium через Telegram")
     print("=" * 60)
@@ -60,7 +60,8 @@ async def main():
         print(f"👑 Администраторы: {config.telegram.admin_users}")
         print("✅ Бот запущен! Нажмите Ctrl+C для остановки.")
         
-        await bot.run()
+        # Запускаем бота (run_polling управляет event loop самостоятельно)
+        bot.run()
         
     except FileNotFoundError as e:
         print(f"❌ Файл конфигурации не найден: {e}")
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     
     # Запускаем основную функцию
     try:
-        asyncio.run(main())
+        main()
     except KeyboardInterrupt:
         print("\n👋 До свидания!")
     except Exception as e:
