@@ -52,8 +52,18 @@ class DiscoCoopBot:
         
         # Основной обработчик игровых команд - работает в личке, на упоминания и ответы
         self.application.add_handler(MessageHandler(
-            (filters.ChatType.PRIVATE | filters.Entity("mention") | filters.REPLY) & filters.TEXT & ~filters.COMMAND,
+            filters.TEXT & ~filters.COMMAND & (
+                filters.ChatType.PRIVATE | 
+                filters.MENTION | 
+                filters.REPLY
+            ),
             self.handle_game_command
+        ))
+        
+        # Дополнительный обработчик для групп - ловит сообщения с упоминанием бота
+        self.application.add_handler(MessageHandler(
+            filters.TEXT & ~filters.COMMAND & (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP),
+            self.handle_group_mention
         ))
         
         # Обработка callback-ов от inline клавиатуры
@@ -96,14 +106,7 @@ class DiscoCoopBot:
         
         if not self._is_authorized_chat(chat_id):
             logger.warning(f"🚫 Доступ запрещен для чата {chat_id} ({chat_title})")
-            await update.message.reply_text(
-                f"❌ Доступ запрещен. Этот чат не авторизован для использования бота.\n\n"
-                f"💡 Для разработчика:\n"
-                f"Chat ID: `{chat_id}`\n"
-                f"Chat Type: {chat_type}\n"
-                f"Chat Title: {chat_title}",
-                parse_mode='Markdown'
-            )
+            await update.message.reply_text("❌ Доступ к боту запрещен.")
             return
         
         welcome_text = """
@@ -227,6 +230,18 @@ class DiscoCoopBot:
         
         await update.message.reply_text(status_text, parse_mode='Markdown')
     
+    async def handle_group_mention(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка упоминаний в группах и супергруппах"""
+        message_text = update.message.text
+        bot_info = await context.bot.get_me()
+        bot_username = bot_info.username
+        
+        # Проверяем, есть ли упоминание бота в сообщении
+        if f'@{bot_username}' in message_text:
+            logger.info(f"🔍 Обнаружено упоминание @{bot_username} в группе")
+            # Передаем обработку основному обработчику
+            await self.handle_game_command(update, context)
+    
     async def handle_game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка игровых команд"""
         chat_id = update.effective_chat.id
@@ -260,13 +275,7 @@ class DiscoCoopBot:
         
         if not self._is_authorized_chat(chat_id):
             logger.warning(f"🚫 Доступ запрещен для чата {chat_id} ({chat_title})")
-            await update.message.reply_text(
-                f"❌ Доступ запрещен.\n\n"
-                f"💡 Для разработчика:\n"
-                f"Chat ID: `{chat_id}`\n" 
-                f"Chat Type: {chat_type}",
-                parse_mode='Markdown'
-            )
+            await update.message.reply_text("❌ Доступ к боту запрещен.")
             return
         
         if not self._check_rate_limit(chat_id):
