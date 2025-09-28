@@ -1,7 +1,19 @@
 #!/bin/bash
 
 # Скрипт запуска Disco Coop Bot
-# Совместимость с python-telegram-bot 13.15
+# Совмеmajor_version = int(version.split('.')[0])
+if major_version < 22:
+    print('')
+    print('❌ КРИТИЧЕСКАЯ ОШИБКА: Устаревшая версия python-telegram-bot!')
+    print(f'   Ожидается: 22.x, найдена: {version}')
+    print('')
+    print('🔧 Для исправления запустите:')
+    print('   pip install \"python-telegram-bot>=22.0,<23.0\" --upgrade')
+    print('')
+    import sys
+    sys.exit(1)
+else:
+    print(f'✅ Версия telegram бота корректная: {version}')ython-telegram-bot 13.15
 
 set -e
 

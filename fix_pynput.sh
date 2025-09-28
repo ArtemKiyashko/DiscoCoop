@@ -6,9 +6,8 @@ cd "$(dirname "$0")"
 echo "🔧 Исправление проблем с зависимостями..."
 
 # Исправляем версию python-telegram-bot
-echo "📦 Исправление версии python-telegram-bot..."
-pip uninstall -y python-telegram-bot
-pip install python-telegram-bot==13.15
+echo "📦 Установка актуальной версии python-telegram-bot..."
+pip install "python-telegram-bot>=22.0,<23.0" --upgrade --no-cache-dir
 
 # Устанавливаем отсутствующие зависимости
 echo "📦 Установка зависимости 'six'..."
