@@ -1,6 +1,22 @@
 # Disco Coop - Кооперативная игра в Disco Elysium через Telegram
 
-![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
+![Python](https://img.shields.io/badge### 🔧 Ошибка бота: Updater object has no attribute
+
+**Проблема:** `'Updater' object has no attribute '_Updater__polling_cleanup_cb'`
+
+**Причина:** Установлена неправильная версия python-telegram-bot (20.x вместо 13.15)
+
+**Быстрое решение на Steam Deck:**
+```bash
+# Запустите скрипт исправления
+./fix_pynput.sh
+
+# Или исправьте вручную
+pip uninstall -y python-telegram-bot
+pip install python-telegram-bot==13.15
+```
+
+⚠️ **Важно**: Эта команда должна выполняться на Steam Deck, а не на вашем локальном компьютере!lue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-SteamDeck%20%7C%20Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)
 
@@ -102,7 +118,23 @@ python main.py
 
 ## Решение проблем
 
-### 🔄 Универсальное решение
+### � Ошибка бота: Updater object has no attribute
+
+**Проблема:** `'Updater' object has no attribute '_Updater__polling_cleanup_cb'`
+
+**Решение:** Эта ошибка возникает из-за несовместимости версий python-telegram-bot. Выполните:
+
+```bash
+./fix_pynput.sh
+```
+
+Или вручную:
+```bash
+pip uninstall -y python-telegram-bot
+pip install python-telegram-bot==13.15
+```
+
+### �🔄 Универсальное решение
 
 При любых проблемах просто запустите скрипт установки повторно:
 
@@ -118,6 +150,7 @@ curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/insta
 - ✅ Проверяет и доустанавливает недостающие зависимости
 - ✅ Настраивает systemd сервисы
 - ✅ Загружает необходимые модели ИИ
+- ✅ Устанавливает правильную версию python-telegram-bot==13.15
 
 ### 🐛 Если ничего не помогает
 

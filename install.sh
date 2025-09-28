@@ -193,7 +193,7 @@ install_package() {
 # Установка критичных зависимостей с fallback версиями
 echo "📦 Установка критичных зависимостей..."
 
-install_package "python-telegram-bot==20.7" "python-telegram-bot>=20.0,<21.0" "true"
+install_package "python-telegram-bot==13.15" "python-telegram-bot==13.15" "true"
 install_package "aiohttp==3.9.1" "aiohttp>=3.8.0" "true"
 install_package "pyyaml==6.0.1" "pyyaml>=6.0" "true"
 install_package "loguru==0.7.2" "loguru>=0.7.0" "true"
@@ -605,7 +605,7 @@ if [ ! -z "$MISSING_DEPS" ]; then
     for dep in $MISSING_DEPS; do
         case $dep in
             "telegram")
-                pip install python-telegram-bot>=20.0,<21.0 --no-cache-dir || \
+                pip install python-telegram-bot==13.15 --no-cache-dir || \
                 pip install python-telegram-bot --no-cache-dir || \
                 echo "❌ Не удалось установить python-telegram-bot"
                 ;;

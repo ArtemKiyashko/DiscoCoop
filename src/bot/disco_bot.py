@@ -1,20 +1,20 @@
 """
-Telegram Bot для управления игрой Disco Elysium
+Telegram Bot для управления игрой Disco Elysium (версия для python-telegram-bot 13.15)
 """
-import asyncio
 import json
 import time
+import threading
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    Application, 
+    Updater,
     CommandHandler, 
     MessageHandler, 
     CallbackQueryHandler,
-    filters,
-    ContextTypes
+    Filters,
+    CallbackContext
 )
 from loguru import logger
 
@@ -25,7 +25,7 @@ from ..game.controller import GameController
 
 
 class DiscoCoopBot:
-    """Основной класс Telegram бота для Disco Coop"""
+    """Основной класс Telegram бота для Disco Coop (версия для python-telegram-bot 13.15)"""
     
     def __init__(self, config: Config):
         self.config = config
@@ -38,29 +38,32 @@ class DiscoCoopBot:
         self.chat_command_count: Dict[int, int] = {}
         self.active_sessions: Dict[int, datetime] = {}
         
-        # Создаем приложение
-        self.application = Application.builder().token(
-            config.telegram.bot_token
-        ).build()
+        # Создаем updater
+        self.updater = Updater(token=config.telegram.bot_token, use_context=True)
+        self.dispatcher = self.updater.dispatcher
         
         self._setup_handlers()
+        
+        # Запускаем фоновую задачу очистки сессий
+        self.cleanup_timer = None
+        self._start_cleanup_timer()
     
     def _setup_handlers(self):
         """Настройка обработчиков команд"""
         # Команды
-        self.application.add_handler(CommandHandler("start", self.start_command))
-        self.application.add_handler(CommandHandler("help", self.help_command))
-        self.application.add_handler(CommandHandler("describe", self.describe_command))
-        self.application.add_handler(CommandHandler("status", self.status_command))
-        self.application.add_handler(CommandHandler("stop_game", self.emergency_stop))
+        self.dispatcher.add_handler(CommandHandler("start", self.start_command))
+        self.dispatcher.add_handler(CommandHandler("help", self.help_command))
+        self.dispatcher.add_handler(CommandHandler("describe", self.describe_command))
+        self.dispatcher.add_handler(CommandHandler("status", self.status_command))
+        self.dispatcher.add_handler(CommandHandler("stop_game", self.emergency_stop))
         
         # Обработка текстовых сообщений как игровых команд
-        self.application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_game_command)
+        self.dispatcher.add_handler(
+            MessageHandler(Filters.text & ~Filters.command, self.handle_game_command)
         )
         
         # Обработка callback-ов от inline клавиатуры
-        self.application.add_handler(CallbackQueryHandler(self.button_callback))
+        self.dispatcher.add_handler(CallbackQueryHandler(self.button_callback))
     
     def _is_authorized_chat(self, chat_id: int) -> bool:
         """Проверка авторизации чата"""
@@ -82,13 +85,13 @@ class DiscoCoopBot:
         
         self.chat_command_count[chat_id] += 1
         return True
-    
-    async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+
+    def start_command(self, update: Update, context: CallbackContext):
         """Команда /start"""
         chat_id = update.effective_chat.id
         
         if not self._is_authorized_chat(chat_id):
-            await update.message.reply_text(
+            update.message.reply_text(
                 "❌ Доступ запрещен. Этот чат не авторизован для использования бота."
             )
             return
@@ -112,7 +115,7 @@ class DiscoCoopBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(
+        update.message.reply_text(
             welcome_text, 
             reply_markup=reply_markup,
             parse_mode='Markdown'
@@ -120,212 +123,257 @@ class DiscoCoopBot:
         
         # Запускаем сессию
         self.active_sessions[chat_id] = datetime.now()
-        logger.info(f"Started session for chat {chat_id}")
-    
-    async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        logger.info(f"Новая сессия запущена для чата {chat_id}")
+
+    def help_command(self, update: Update, context: CallbackContext):
         """Команда /help"""
+        chat_id = update.effective_chat.id
+        
+        if not self._is_authorized_chat(chat_id):
+            update.message.reply_text("❌ Доступ запрещен.")
+            return
+        
+        if not self._check_rate_limit(chat_id):
+            update.message.reply_text("⚠️ Слишком много команд. Подождите минуту.")
+            return
+        
         help_text = """
-🎮 **Disco Coop - Справка**
+📖 **Справка по Disco Coop Bot**
 
 **Основные команды:**
-• `/start` - Начать работу с ботом
+• `/start` - Запустить бота
 • `/describe` - Описать что происходит на экране
 • `/status` - Показать статус игры и бота
 • `/help` - Показать эту справку
 
-**Игровые команды (примеры):**
+**Игровые команды:**
+Пишите команды обычным текстом, например:
 • "подойти к двери"
-• "поговорить с бармен"
-• "открыть инвентарь"
-• "прочитать книгу"
-• "выбрать первый вариант диалога"
-• "сохранить игру"
+• "поговорить с барменом" 
+• "осмотреть комнату"
+• "использовать предмет"
 
-**Правила:**
-• Максимум {} команд в минуту на чат
-• Сессия автоматически завершается через {} минут
-• Экстренная остановка: `{}`
+**Ограничения:**
+• Максимум команд в минуту: 10
+• Сессия автоматически завершается через 30 минут бездействия
 
-**Статус бота:** {}
-        """.format(
-            self.config.security.rate_limit,
-            self.config.security.max_session_time,
-            self.config.security.emergency_stop_command,
-            "🟢 Активен" if self.game_controller.is_game_running() else "🔴 Игра не найдена"
-        )
+⚡ **Совет:** Чем более конкретно вы опишете действие, тем лучше будет результат!
+        """
         
-        await update.message.reply_text(help_text, parse_mode='Markdown')
-    
-    async def describe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Команда /describe - описать экран"""
+        update.message.reply_text(help_text, parse_mode='Markdown')
+
+    def describe_command(self, update: Update, context: CallbackContext):
+        """Команда /describe - описание экрана"""
         chat_id = update.effective_chat.id
         
         if not self._is_authorized_chat(chat_id):
-            await update.message.reply_text("❌ Доступ запрещен.")
+            update.message.reply_text("❌ Доступ запрещен.")
             return
         
         if not self._check_rate_limit(chat_id):
-            await update.message.reply_text("⏳ Превышен лимит команд. Подождите минуту.")
+            update.message.reply_text("⚠️ Слишком много команд. Подождите минуту.")
             return
         
-        # Показываем, что бот работает
-        await update.message.reply_text("📸 Анализирую экран...")
-        
         try:
-            # Делаем скриншот и анализируем
-            description = await self.screen_analyzer.describe_screen()
+            # Получаем скриншот и анализируем
+            update.message.reply_text("📸 Анализирую экран...")
             
-            if description:
-                await update.message.reply_text(f"👁️ **На экране:**\n{description}", parse_mode='Markdown')
-            else:
-                await update.message.reply_text("❌ Не удалось проанализировать экран. Убедитесь, что игра запущена.")
-        
+            screenshot_path = self.screen_analyzer.capture_screenshot()
+            description = self.screen_analyzer.analyze_screenshot(screenshot_path)
+            
+            update.message.reply_text(f"📖 **Описание экрана:**\n\n{description}", parse_mode='Markdown')
+            
         except Exception as e:
-            logger.error(f"Error in describe_command: {e}")
-            await update.message.reply_text("❌ Ошибка при анализе экрана.")
-    
-    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Команда /status"""
+            logger.error(f"Ошибка при анализе экрана: {e}")
+            update.message.reply_text("❌ Ошибка при анализе экрана. Убедитесь, что игра запущена.")
+
+    def status_command(self, update: Update, context: CallbackContext):
+        """Команда /status - статус системы"""
         chat_id = update.effective_chat.id
         
         if not self._is_authorized_chat(chat_id):
-            await update.message.reply_text("❌ Доступ запрещен.")
+            update.message.reply_text("❌ Доступ запрещен.")
             return
         
-        game_status = "🟢 Запущена" if self.game_controller.is_game_running() else "🔴 Не найдена"
-        llm_status = "🟢 Подключена" if await self.llm_agent.is_available() else "🔴 Недоступна"
-        
-        session_time = ""
-        if chat_id in self.active_sessions:
-            elapsed = datetime.now() - self.active_sessions[chat_id]
-            session_time = f"⏱️ Время сессии: {elapsed.seconds // 60} мин"
-        
-        status_text = f"""
-📊 **Статус системы**
+        try:
+            # Проверяем компоненты системы
+            llm_status = "✅ Работает" if self.llm_agent.is_available() else "❌ Недоступен"
+            vision_status = "✅ Работает" if self.screen_analyzer.is_available() else "❌ Недоступен"
+            controller_status = "✅ Работает" if self.game_controller.is_available() else "❌ Недоступен"
+            
+            # Статистика сессии
+            session_start = self.active_sessions.get(chat_id)
+            session_duration = "Неактивна"
+            if session_start:
+                duration = datetime.now() - session_start
+                session_duration = f"{duration.seconds // 60} мин"
+            
+            commands_used = self.chat_command_count.get(chat_id, 0)
+            
+            status_text = f"""
+📊 **Статус системы Disco Coop**
 
-🎮 Игра: {game_status}
-🤖 LLM: {llm_status}
-💬 Чат: {"🟢 Авторизован" if self._is_authorized_chat(chat_id) else "🔴 Не авторизован"}
-{session_time}
+**Компоnenты:**
+• LLM агент: {llm_status}
+• Анализ экрана: {vision_status}  
+• Управление игрой: {controller_status}
 
-📋 Команд выполнено: {self.chat_command_count.get(chat_id, 0)}
-⏳ Лимит: {self.config.security.rate_limit}/мин
-        """
-        
-        await update.message.reply_text(status_text, parse_mode='Markdown')
-    
-    async def handle_game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+**Сессия:**
+• Продолжительность: {session_duration}
+• Команд использовано: {commands_used}/10 в минуту
+
+**Конфигурация:**
+• Модель LLM: {self.config.llm.model_name}
+• Разрешение экрана: {self.config.vision.screenshot_resolution}
+            """
+            
+            update.message.reply_text(status_text, parse_mode='Markdown')
+            
+        except Exception as e:
+            logger.error(f"Ошибка при получении статуса: {e}")
+            update.message.reply_text("❌ Ошибка при получении статуса системы.")
+
+    def handle_game_command(self, update: Update, context: CallbackContext):
         """Обработка игровых команд"""
         chat_id = update.effective_chat.id
         user_command = update.message.text
         
         if not self._is_authorized_chat(chat_id):
-            await update.message.reply_text("❌ Доступ запрещен.")
+            update.message.reply_text("❌ Доступ запрещен.")
             return
         
         if not self._check_rate_limit(chat_id):
-            await update.message.reply_text("⏳ Превышен лимит команд. Подождите минуту.")
+            update.message.reply_text("⚠️ Слишком много команд. Подождите минуту.")
             return
-        
-        if not self.game_controller.is_game_running():
-            await update.message.reply_text("❌ Игра не запущена или не найдена.")
-            return
-        
-        # Показываем, что обрабатываем команду
-        processing_msg = await update.message.reply_text("🎮 Выполняю команду...")
         
         try:
-            # Получаем текущий скриншот для контекста
-            screenshot = await self.screen_analyzer.take_screenshot()
+            # Обновляем активность сессии
+            self.active_sessions[chat_id] = datetime.now()
             
-            # Обрабатываем команду через LLM
-            result = await self.llm_agent.process_command(user_command, screenshot)
+            # Показываем что обрабатываем команду
+            update.message.reply_text("🎮 Выполняю команду...")
             
-            if result and result.get('actions'):
-                # Выполняем действия в игре
-                success = await self.game_controller.execute_actions(result['actions'])
-                
-                if success:
-                    response = f"✅ {result.get('description', 'Команда выполнена')}"
-                else:
-                    response = "⚠️ Команда выполнена частично или с ошибками"
-            else:
-                response = "❓ Не удалось понять команду. Попробуйте переформулировать."
+            # Получаем текущее состояние экрана
+            screenshot_path = self.screen_analyzer.capture_screenshot()
+            screen_context = self.screen_analyzer.analyze_screenshot(screenshot_path)
             
-            # Обновляем сообщение с результатом
-            await processing_msg.edit_text(response)
+            # Получаем план действий от LLM
+            action_plan = self.llm_agent.process_command(user_command, screen_context)
+            
+            # Выполняем действия
+            result = self.game_controller.execute_actions(action_plan)
+            
+            # Формируем ответ
+            response = f"✅ **Выполнено:** {user_command}\n\n📋 **Результат:** {result}"
+            
+            # Добавляем клавиатуру для быстрых действий
+            keyboard = [
+                [InlineKeyboardButton("📖 Описать экран", callback_data="describe")],
+                [InlineKeyboardButton("📊 Статус", callback_data="status")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            update.message.reply_text(
+                response, 
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
             
         except Exception as e:
-            logger.error(f"Error processing command '{user_command}': {e}")
-            await processing_msg.edit_text("❌ Ошибка при выполнении команды.")
-    
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+            logger.error(f"Ошибка при выполнении игровой команды: {e}")
+            update.message.reply_text(
+                f"❌ Ошибка при выполнении команды: {str(e)}\n\n"
+                "Убедитесь, что игра запущена и активна."
+            )
+
+    def button_callback(self, update: Update, context: CallbackContext):
         """Обработка нажатий inline кнопок"""
         query = update.callback_query
-        await query.answer()
+        chat_id = query.message.chat_id
         
-        if query.data == "describe":
-            await self.describe_command(update, context)
-        elif query.data == "status":
-            await self.status_command(update, context)
-        elif query.data == "help":
-            await self.help_command(update, context)
-    
-    async def emergency_stop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Экстренная остановка"""
-        user_id = update.effective_user.id
-        
-        if user_id not in self.config.telegram.admin_users:
-            await update.message.reply_text("❌ Недостаточно прав.")
+        if not self._is_authorized_chat(chat_id):
+            query.answer("❌ Доступ запрещен.")
             return
         
-        # Останавливаем все активные действия
-        await self.game_controller.stop_all_actions()
+        query.answer()  # Убираем индикатор загрузки
         
-        # Очищаем активные сессии
-        self.active_sessions.clear()
+        # Обрабатываем команду
+        if query.data == "describe":
+            self.describe_command(update, context)
+        elif query.data == "status":
+            self.status_command(update, context)
+        elif query.data == "help":
+            self.help_command(update, context)
+
+    def emergency_stop(self, update: Update, context: CallbackContext):
+        """Экстренная остановка игры"""
+        chat_id = update.effective_chat.id
         
-        await update.message.reply_text("🛑 Экстренная остановка выполнена. Все действия остановлены.")
-        logger.warning(f"Emergency stop triggered by user {user_id}")
-    
-    async def cleanup_sessions(self):
-        """Очистка устаревших сессий"""
-        now = datetime.now()
-        max_time = timedelta(minutes=self.config.security.max_session_time)
-        
-        expired_sessions = [
-            chat_id for chat_id, start_time in self.active_sessions.items()
-            if now - start_time > max_time
-        ]
-        
-        for chat_id in expired_sessions:
-            del self.active_sessions[chat_id]
-            logger.info(f"Session expired for chat {chat_id}")
-    
-    async def run(self):
-        """Запуск бота"""
-        logger.info("Starting Disco Coop Bot...")
-        
-        # Запускаем периодическую очистку сессий
-        async def cleanup_task():
-            while True:
-                await asyncio.sleep(60)  # Каждую минуту
-                await self.cleanup_sessions()
-        
-        # Запускаем фоновую задачу
-        asyncio.create_task(cleanup_task())
-        
-        # Запускаем бота
-        await self.application.initialize()
-        await self.application.start()
-        await self.application.updater.start_polling(drop_pending_updates=True)
-        
-        logger.info("Bot is running...")
+        if not self._is_authorized_chat(chat_id):
+            update.message.reply_text("❌ Доступ запрещен.")
+            return
         
         try:
-            await asyncio.Future()  # Работаем до получения сигнала остановки
-        except KeyboardInterrupt:
-            logger.info("Shutting down bot...")
+            # Останавливаем все действия
+            self.game_controller.emergency_stop()
+            
+            # Завершаем сессию
+            if chat_id in self.active_sessions:
+                del self.active_sessions[chat_id]
+            
+            update.message.reply_text("🛑 **Экстренная остановка выполнена!**\n\nВсе действия прерваны.")
+            
+        except Exception as e:
+            logger.error(f"Ошибка при экстренной остановке: {e}")
+            update.message.reply_text("❌ Ошибка при экстренной остановке.")
+
+    def _cleanup_sessions(self):
+        """Очистка неактивных сессий"""
+        try:
+            now = datetime.now()
+            inactive_sessions = []
+            
+            for chat_id, last_activity in self.active_sessions.items():
+                if (now - last_activity).total_seconds() > 1800:  # 30 минут
+                    inactive_sessions.append(chat_id)
+            
+            for chat_id in inactive_sessions:
+                del self.active_sessions[chat_id]
+                logger.info(f"Сессия {chat_id} завершена по таймауту")
+                
+        except Exception as e:
+            logger.error(f"Ошибка при очистке сессий: {e}")
+
+    def _start_cleanup_timer(self):
+        """Запуск таймера очистки сессий"""
+        self._cleanup_sessions()
+        self.cleanup_timer = threading.Timer(300.0, self._start_cleanup_timer)  # каждые 5 минут
+        self.cleanup_timer.daemon = True
+        self.cleanup_timer.start()
+
+    def run(self):
+        """Запуск бота"""
+        try:
+            logger.info("🚀 Запуск Disco Coop Bot...")
+            logger.info(f"📡 Авторизованные чаты: {self.config.telegram.allowed_chats}")
+            
+            # Запускаем polling
+            self.updater.start_polling()
+            logger.info("✅ Бот запущен успешно!")
+            
+            # Ждем остановки
+            self.updater.idle()
+            
+        except Exception as e:
+            logger.error(f"❌ Ошибка при запуске бота: {e}")
+            raise
         finally:
-            await self.application.stop()
-            await self.application.shutdown()
+            if self.cleanup_timer:
+                self.cleanup_timer.cancel()
+            logger.info("🛑 Disco Coop Bot остановлен")
+
+    def stop(self):
+        """Остановка бота"""
+        if self.cleanup_timer:
+            self.cleanup_timer.cancel()
+        self.updater.stop()
