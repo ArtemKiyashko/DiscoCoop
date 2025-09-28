@@ -69,6 +69,9 @@ curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/insta
 
 # Исправление pacman (если нужно):
 curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh" | bash
+
+# Исправление Ollama на Steam Deck (если нужно):
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_ollama_steamdeck.sh" | bash
 ```
 
 **Ручная установка:**
@@ -91,7 +94,13 @@ cp config/config.example.yaml config/config.yaml
 
 4. Установите Ollama и модель:
 ```bash
+# Обычная установка:
 curl -fsSL https://ollama.ai/install.sh | sh
+
+# Если проблемы на Steam Deck:
+./fix_ollama_steamdeck.sh
+
+# Загрузка моделей:
 ollama pull llama3.1:8b
 ollama pull llava:7b  # для анализа изображений
 ```
@@ -120,6 +129,49 @@ python main.py
 - Бот работает только в чатах из белого списка
 - Все команды логируются
 - Возможность экстренной остановки
+
+## Решение проблем на Steam Deck
+
+### Проблема с externally-managed-environment
+
+Если при установке Python пакетов вы получаете ошибку:
+```
+error: externally-managed-environment
+```
+
+**Решение: Используйте минимальный скрипт установки**
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install_minimal.sh" | bash
+```
+
+Этот скрипт использует портативный Python и обходит системные ограничения.
+
+### Проблема с установкой Ollama
+
+Если при установке Ollama вы получаете ошибку:
+```
+install: cannot change owner and permissions of '/usr/local/lib/ollama': No such file or directory
+```
+
+**Решение: Установка Ollama в пользовательскую директорию**
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_ollama_steamdeck.sh" | bash
+```
+
+Или вручную:
+```bash
+mkdir -p ~/.local/bin
+curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64 -o ~/.local/bin/ollama
+chmod +x ~/.local/bin/ollama
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+### Проблема с PGP ключами pacman
+
+Если получаете ошибки PGP при установке пакетов:
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh" | bash
+```
 
 ## Разработка
 

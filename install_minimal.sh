@@ -52,16 +52,54 @@ pip install pyyaml==6.0.1
 pip install loguru==0.7.2
 pip install Pillow==10.1.0
 
-echo "🤖 Проверка Ollama..."
+echo "🤖 Установка Ollama..."
 if ! command -v ollama &> /dev/null; then
-    echo "📥 Установка Ollama..."
-    curl -fsSL https://ollama.ai/install.sh | sh
+    echo "📥 Установка Ollama в пользовательскую директорию..."
+    
+    # Создаем директорию для Ollama
+    mkdir -p "$HOME/.local/bin"
+    mkdir -p "$HOME/.ollama"
+    
+    # Определяем архитектуру
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "x86_64" ]; then
+        OLLAMA_URL="https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64"
+    else
+        echo "❌ Неподдерживаемая архитектура: $ARCH"
+        exit 1
+    fi
+    
+    # Скачиваем Ollama
+    echo "📥 Загрузка Ollama..."
+    if curl -L "$OLLAMA_URL" -o "$HOME/.local/bin/ollama"; then
+        chmod +x "$HOME/.local/bin/ollama"
+        
+        # Добавляем в PATH
+        export PATH="$HOME/.local/bin:$PATH"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        
+        echo "✅ Ollama установлен в $HOME/.local/bin/ollama"
+    else
+        echo "❌ Не удалось загрузить Ollama"
+        exit 1
+    fi
+else
+    echo "✅ Ollama уже установлен"
 fi
 
 # Запуск Ollama в фоне
 if ! pgrep -f "ollama serve" > /dev/null; then
     echo "🚀 Запуск Ollama..."
-    nohup ollama serve > /dev/null 2>&1 &
+    # Проверяем, что Ollama доступна
+    if command -v ollama &> /dev/null; then
+        nohup ollama serve > /dev/null 2>&1 &
+    elif [ -f "$HOME/.local/bin/ollama" ]; then
+        export PATH="$HOME/.local/bin:$PATH"
+        nohup "$HOME/.local/bin/ollama" serve > /dev/null 2>&1 &
+    else
+        echo "❌ Ollama не найдена"
+        exit 1
+    fi
     sleep 5
 fi
 
@@ -82,7 +120,12 @@ source venv/bin/activate
 
 # Запуск Ollama если не запущен
 if ! pgrep -f "ollama serve" > /dev/null; then
-    nohup ollama serve > /dev/null 2>&1 &
+    if command -v ollama &> /dev/null; then
+        nohup ollama serve > /dev/null 2>&1 &
+    elif [ -f "$HOME/.local/bin/ollama" ]; then
+        export PATH="$HOME/.local/bin:$PATH"
+        nohup "$HOME/.local/bin/ollama" serve > /dev/null 2>&1 &
+    fi
     sleep 3
 fi
 
