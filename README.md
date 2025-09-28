@@ -55,6 +55,18 @@
 
 ### Быстрый старт
 
+**Автоматическая установка на Steam Deck:**
+```bash
+# Основной скрипт установки (с обходом кэша)
+curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh?$(date +%s)" | bash
+
+# Если возникают проблемы с pacman, сначала запустите скрипт исправления:
+curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh?$(date +%s)" | bash
+```
+
+**Ручная установка:**
 1. Клонируйте репозиторий:
 ```bash
 git clone https://github.com/ArtemKiyashko/DiscoCoop.git

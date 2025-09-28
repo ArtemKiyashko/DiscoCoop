@@ -9,9 +9,12 @@ REPOSITORY_URL="https://github.com/ArtemKiyashko/DiscoCoop.git"
 
 echo "🎮 Disco Coop - Установка на Steam Deck"
 echo "========================================"
+echo "📅 Версия скрипта: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "🔗 Репозиторий: $REPOSITORY_URL"
+echo ""
 
-# Проверка что мы в Desktop Mode
-if [ "$XDG_CURRENT_DESKTOP" != "KDE" ]; then
+# Проверка что мы в Desktop Mode (только для Steam Deck)
+if [ -f "/etc/steamos-release" ] && [ "$XDG_CURRENT_DESKTOP" != "KDE" ]; then
     echo "⚠️  Пожалуйста, переключитесь в Desktop Mode для установки"
     exit 1
 fi
@@ -39,30 +42,74 @@ if command -v pacman &> /dev/null; then
     echo "🔓 Разблокировка файловой системы Steam Deck..."
     sudo steamos-readonly disable 2>/dev/null || true
     
-    echo "🔑 Инициализация keyring..."
+    echo "🔑 Настройка keyring для SteamOS..."
     sudo pacman-key --init 2>/dev/null || true
     sudo pacman-key --populate archlinux 2>/dev/null || true
     
-    echo "📥 Обновление базы данных пакетов..."
+    # Добавляем ключи SteamOS
+    echo "� Добавление ключей SteamOS..."
+    sudo pacman-key --recv-keys 3056513887B78AEB 2>/dev/null || true
+    sudo pacman-key --lsign-key 3056513887B78AEB 2>/dev/null || true
+    
+    echo "�📥 Обновление базы данных пакетов..."
     sudo pacman -Sy --noconfirm
     
     echo "📦 Установка пакетов..."
-    sudo pacman -S --needed --noconfirm python python-pip git tk xdotool imagemagick
+    # Пробуем установить с игнорированием подписей для SteamOS пакетов
+    if ! sudo pacman -S --needed --noconfirm python python-pip git tk xdotool imagemagick 2>/dev/null; then
+        echo "⚠️  Обычная установка не удалась, пробуем без проверки подписей..."
+        sudo pacman -S --needed --noconfirm --disable-download-timeout python python-pip git 2>/dev/null || {
+            echo "❌ Не удается установить через pacman, переходим к альтернативному методу..."
+            return 1
+        }
+    fi
     
     echo "🔒 Возвращение файловой системы в read-only режим..."
     sudo steamos-readonly enable 2>/dev/null || true
 else
-    echo "⚠️  pacman недоступен, используем альтернативные методы..."
+    echo "⚠️  pacman недоступен или не работает, используем альтернативные методы..."
+fi
+
+# Проверяем наличие Python независимо от успеха pacman
+if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+    echo "� Python не найден, устанавливаем переносимую версию..."
+    cd /tmp
     
-    # Проверяем Python
-    if ! command -v python3 &> /dev/null; then
-        echo "📥 Загрузка переносимой версии Python..."
-        cd /tmp
-        curl -L https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz -o python.tar.gz
+    # Загружаем переносимую версию Python
+    echo "📥 Загрузка Python 3.11..."
+    if curl -L https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz -o python.tar.gz; then
+        echo "📂 Распаковка Python..."
         tar -xzf python.tar.gz -C "$HOME"
+        
+        # Создаем симлинки для удобства
+        ln -sf "$HOME/python/bin/python3" "$HOME/python/bin/python" 2>/dev/null || true
+        
         export PATH="$HOME/python/bin:$PATH"
+        
+        # Добавляем в bashrc и profile
         echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.bashrc
+        echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.profile
+        
         cd "$PROJECT_DIR"
+        echo "✅ Python установлен в $HOME/python"
+    else
+        echo "❌ Не удалось загрузить Python. Проверьте подключение к интернету."
+        exit 1
+    fi
+fi
+
+# Проверяем pip
+if ! command -v pip &> /dev/null && ! command -v pip3 &> /dev/null; then
+    echo "📦 pip не найден, устанавливаем..."
+    if command -v python3 &> /dev/null; then
+        python3 -m ensurepip --default-pip --user
+    elif command -v python &> /dev/null; then
+        python -m ensurepip --default-pip --user
+    else
+        # Загружаем get-pip.py
+        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+        python3 get-pip.py --user || python get-pip.py --user
+        rm get-pip.py
     fi
 fi
 

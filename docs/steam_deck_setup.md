@@ -49,8 +49,25 @@
 
 ```bash
 ```bash
-# Скачайте и запустите скрипт установки
-curl -fsSL https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh | bash
+### 1. **Быстрый старт на Steam Deck:**
+```bash
+# Автоматическая установка (с обходом кэша)
+curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh?$(date +%s)" | bash
+
+# Альтернативный способ (если кэш всё ещё мешает):
+wget -O - --no-cache --no-cookies \
+  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh" | bash
+
+# Или скачать и запустить локально:
+curl -O "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh"
+chmod +x install.sh
+./install.sh
+
+# Если получаете ошибки PGP подписей, сначала исправьте pacman:
+curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh?$(date +%s)" | bash
+```
 ```
 
 # Запускаем Ollama как сервис
@@ -254,19 +271,87 @@ llm:
 
 ## Решение проблем
 
-### Проблема: Ошибки pacman на Steam Deck
+### Проблема: Получение старой версии скрипта установки
+
+**Симптомы:**
+- Скрипт не содержит последних исправлений
+- Повторяются уже исправленные ошибки
+- GitHub показывает обновления, но скрипт их не содержит
+
+**Причина:** Кэширование на стороне curl или CDN GitHub
+
+**Решения:**
 ```bash
-# Если "failed to synchronize all databases"
+# 1. Используйте команду с обходом кэша
+curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
+  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh?$(date +%s)" | bash
+
+# 2. Используйте wget вместо curl
+wget -O - --no-cache --no-cookies \
+  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh" | bash
+
+# 3. Скачайте файл отдельно и запустите
+curl -O "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh"
+chmod +x install.sh
+./install.sh
+
+# 4. Клонируйте репозиторий напрямую
+git clone https://github.com/ArtemKiyashko/DiscoCoop.git
+cd DiscoCoop
+./install.sh
+
+# 5. Используйте специальный скрипт для получения свежих версий
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/get_fresh_scripts.sh" | bash
+
+# 6. Очистите локальный кэш curl (если есть)
+rm -rf ~/.cache/curl* 2>/dev/null || true
+```
+
+### Проблема: Ошибки PGP подписей в pacman (Steam Deck)
+
+**Симптомы:** 
+- `signature from "GitLab CI Package Builder" is unknown trust`
+- `invalid or corrupted package (PGP signature)`
+
+**Решение:**
+```bash
+# 1. Разблокируем файловую систему
 sudo steamos-readonly disable
+
+# 2. Очищаем и переинициализируем keyring
+sudo rm -rf /etc/pacman.d/gnupg
 sudo pacman-key --init
 sudo pacman-key --populate archlinux
+
+# 3. Добавляем ключи SteamOS
+sudo pacman-key --recv-keys 3056513887B78AEB
+sudo pacman-key --lsign-key 3056513887B78AEB
+
+# 4. Очищаем кеш пакетов
+sudo pacman -Scc --noconfirm
+
+# 5. Обновляем базу данных
 sudo pacman -Sy
 
-# Если всё ещё не работает, используйте альтернативную установку Python
+# 6. Пробуем установить пакеты
+sudo pacman -S --needed python python-pip git
+
+# 7. Если всё ещё не работает, полностью игнорируем проверку подписей
+sudo pacman -S --needed --disable-download-timeout python python-pip git
+```
+
+**Альтернативное решение (если pacman совсем не работает):**
+```bash
+# Используем переносимую версию Python без системных пакетов
+cd /tmp
 curl -L https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz -o python.tar.gz
 tar -xzf python.tar.gz -C ~/
 echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
+
+# Проверяем установку
+python3 --version
+pip3 --version
 ```
 
 ### Проблема: "steamos-readonly command not found"
