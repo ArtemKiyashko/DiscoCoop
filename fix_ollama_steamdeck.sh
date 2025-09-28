@@ -23,8 +23,38 @@ fi
 # Скачиваем Ollama напрямую
 echo "📥 Загрузка Ollama..."
 if curl -L "$OLLAMA_URL" -o "$HOME/.local/bin/ollama"; then
-    chmod +x "$HOME/.local/bin/ollama"
-    echo "✅ Ollama установлен в $HOME/.local/bin/ollama"
+    # Проверяем, что скачался правильный файл
+    if file "$HOME/.local/bin/ollama" | grep -q "ELF.*executable"; then
+        chmod +x "$HOME/.local/bin/ollama"
+        echo "✅ Ollama установлен в $HOME/.local/bin/ollama"
+    else
+        echo "❌ Скачанный файл поврежден или не является исполняемым"
+        echo "🔍 Проверяем содержимое:"
+        file "$HOME/.local/bin/ollama"
+        echo "📄 Первые строки файла:"
+        head -5 "$HOME/.local/bin/ollama"
+        
+        # Удаляем поврежденный файл
+        rm -f "$HOME/.local/bin/ollama"
+        
+        # Пробуем альтернативный URL
+        echo "🔄 Пробуем альтернативный метод загрузки..."
+        OLLAMA_ALT_URL="https://github.com/ollama/ollama/releases/download/v0.3.12/ollama-linux-amd64"
+        
+        if curl -L "$OLLAMA_ALT_URL" -o "$HOME/.local/bin/ollama"; then
+            if file "$HOME/.local/bin/ollama" | grep -q "ELF.*executable"; then
+                chmod +x "$HOME/.local/bin/ollama"
+                echo "✅ Ollama установлен (альтернативный метод)"
+            else
+                echo "❌ Альтернативная загрузка также не удалась"
+                rm -f "$HOME/.local/bin/ollama"
+                exit 1
+            fi
+        else
+            echo "❌ Альтернативная загрузка не удалась"
+            exit 1
+        fi
+    fi
 else
     echo "❌ Не удалось загрузить Ollama"
     exit 1

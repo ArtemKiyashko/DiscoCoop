@@ -72,6 +72,9 @@ curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_s
 
 # Исправление Ollama на Steam Deck (если нужно):
 curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_ollama_steamdeck.sh" | bash
+
+# Переустановка Ollama (если файл поврежден):
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/reinstall_ollama.sh" | bash
 ```
 
 **Ручная установка:**
@@ -158,10 +161,25 @@ install: cannot change owner and permissions of '/usr/local/lib/ollama': No such
 curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_ollama_steamdeck.sh" | bash
 ```
 
+### Проблема с поврежденным файлом Ollama
+
+Если Ollama установился, но при запуске выдает ошибку типа:
+```
+/home/deck/.local/bin/ollama: line 1: Not: command not found
+```
+
+Это означает, что вместо бинарного файла загрузилась HTML-страница или текст ошибки.
+
+**Решение: Переустановка Ollama**
+```bash
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/reinstall_ollama.sh" | bash
+```
+
 Или вручную:
 ```bash
+rm -f ~/.local/bin/ollama
 mkdir -p ~/.local/bin
-curl -L https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64 -o ~/.local/bin/ollama
+curl -L https://github.com/ollama/ollama/releases/download/v0.3.12/ollama-linux-amd64 -o ~/.local/bin/ollama
 chmod +x ~/.local/bin/ollama
 export PATH="$HOME/.local/bin:$PATH"
 ```

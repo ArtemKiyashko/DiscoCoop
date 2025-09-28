@@ -72,13 +72,24 @@ if ! command -v ollama &> /dev/null; then
     # Скачиваем Ollama
     echo "📥 Загрузка Ollama..."
     if curl -L "$OLLAMA_URL" -o "$HOME/.local/bin/ollama"; then
-        chmod +x "$HOME/.local/bin/ollama"
-        
-        # Добавляем в PATH
-        export PATH="$HOME/.local/bin:$PATH"
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-        
-        echo "✅ Ollama установлен в $HOME/.local/bin/ollama"
+        # Проверяем, что скачался правильный файл
+        if file "$HOME/.local/bin/ollama" | grep -q "ELF.*executable"; then
+            chmod +x "$HOME/.local/bin/ollama"
+            
+            # Добавляем в PATH
+            export PATH="$HOME/.local/bin:$PATH"
+            if ! grep -q "export PATH.*\.local/bin" ~/.bashrc; then
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+            fi
+            
+            echo "✅ Ollama установлен в $HOME/.local/bin/ollama"
+        else
+            echo "❌ Скачанный файл поврежден или неправильный"
+            echo "🔍 Содержимое файла:"
+            head -5 "$HOME/.local/bin/ollama"
+            rm -f "$HOME/.local/bin/ollama"
+            exit 1
+        fi
     else
         echo "❌ Не удалось загрузить Ollama"
         exit 1
