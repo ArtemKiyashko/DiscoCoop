@@ -55,8 +55,16 @@ class DiscoCoopBot:
         self.application.add_handler(CommandHandler("stop_game", self.emergency_stop))
         
         # Обработка текстовых сообщений как игровых команд
+        # В группах: только если сообщение упоминает бота или отвечает на сообщение бота
+        # В приватных чатах: все текстовые сообщения
         self.application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_game_command)
+            MessageHandler(
+                (filters.TEXT & ~filters.COMMAND) & 
+                (filters.ChatType.PRIVATE | 
+                 filters.MENTION | 
+                 filters.REPLY),
+                self.handle_game_command
+            )
         )
         
         # Обработка callback-ов от inline клавиатуры
@@ -86,10 +94,26 @@ class DiscoCoopBot:
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Команда /start"""
         chat_id = update.effective_chat.id
+        chat_type = update.effective_chat.type
+        chat_title = getattr(update.effective_chat, 'title', 'Private Chat')
+        user_name = update.effective_user.username or update.effective_user.first_name
+        
+        # Логируем все попытки запуска
+        logger.info(f"📨 Команда /start получена:")
+        logger.info(f"   Chat ID: {chat_id}")
+        logger.info(f"   Chat Type: {chat_type}")
+        logger.info(f"   Chat Title: {chat_title}")
+        logger.info(f"   User: {user_name} (ID: {update.effective_user.id})")
         
         if not self._is_authorized_chat(chat_id):
+            logger.warning(f"🚫 Доступ запрещен для чата {chat_id} ({chat_title})")
             await update.message.reply_text(
-                "❌ Доступ запрещен. Этот чат не авторизован для использования бота."
+                f"❌ Доступ запрещен. Этот чат не авторизован для использования бота.\n\n"
+                f"💡 Для разработчика:\n"
+                f"Chat ID: `{chat_id}`\n"
+                f"Chat Type: {chat_type}\n"
+                f"Chat Title: {chat_title}",
+                parse_mode='Markdown'
             )
             return
         
@@ -218,9 +242,42 @@ class DiscoCoopBot:
         """Обработка игровых команд"""
         chat_id = update.effective_chat.id
         user_command = update.message.text
+        chat_type = update.effective_chat.type
+        chat_title = getattr(update.effective_chat, 'title', 'Private Chat')
+        user_name = update.effective_user.username or update.effective_user.first_name
+        
+        # Логируем все входящие сообщения
+        logger.info(f"📨 Сообщение получено:")
+        logger.info(f"   Chat ID: {chat_id}")
+        logger.info(f"   Chat Type: {chat_type}")
+        logger.info(f"   Chat Title: {chat_title}")
+        logger.info(f"   User: {user_name} (ID: {update.effective_user.id})")
+        logger.info(f"   Message: {user_command[:100]}...")
+        
+        # В группах очищаем упоминание бота из команды
+        if chat_type in ['group', 'supergroup']:
+            # Получаем информацию о боте
+            bot_info = await context.bot.get_me()
+            bot_username = bot_info.username
+            
+            # Убираем упоминание бота из начала сообщения
+            if user_command.startswith(f'@{bot_username}'):
+                user_command = user_command[len(f'@{bot_username}'):].strip()
+                logger.info(f"   Очищенная команда: {user_command}")
+            
+            # Если сообщение было пустым после удаления упоминания, используем дефолтную команду
+            if not user_command:
+                user_command = "описать экран"
         
         if not self._is_authorized_chat(chat_id):
-            await update.message.reply_text("❌ Доступ запрещен.")
+            logger.warning(f"🚫 Доступ запрещен для чата {chat_id} ({chat_title})")
+            await update.message.reply_text(
+                f"❌ Доступ запрещен.\n\n"
+                f"💡 Для разработчика:\n"
+                f"Chat ID: `{chat_id}`\n" 
+                f"Chat Type: {chat_type}",
+                parse_mode='Markdown'
+            )
             return
         
         if not self._check_rate_limit(chat_id):
