@@ -1,0 +1,42 @@
+# Disco Coop
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv
+pip-log.txt
+.coverage
+.tox
+.env
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Config
+config/config.yaml
+
+# Screenshots (temporary)
+screenshots/
+temp/
+
+# Models (if downloaded locally)
+models/
+
+# Steam Deck specific
+steamdeck_backup/

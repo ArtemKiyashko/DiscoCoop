@@ -1,0 +1,60 @@
+# Конфигурация Disco Coop Bot
+telegram:
+  bot_token: "YOUR_BOT_TOKEN_HERE"  # Получите от @BotFather в Telegram
+  allowed_chats:  # Белый список чатов (chat_id)
+    - -1001234567890  # Пример ID группового чата
+    - -1009876543210  # Добавьте свои chat_id сюда
+  admin_users:  # ID администраторов (для экстренной остановки)
+    - 123456789
+    - 987654321
+
+llm:
+  provider: "ollama"  # ollama, openai, anthropic
+  model: "llama3.1:8b"  # Модель для обработки команд
+  vision_model: "llava:7b"  # Модель для анализа изображений
+  base_url: "http://localhost:11434"  # URL Ollama сервера
+  max_tokens: 2048
+  temperature: 0.7
+  system_prompt: |
+    Ты помощник для игры в Disco Elysium. Твоя задача - интерпретировать команды игроков 
+    на русском языке и преобразовывать их в конкретные игровые действия.
+    
+    Доступные действия:
+    - move_mouse(x, y) - переместить курсор
+    - click(x, y) - кликнуть в точку
+    - key_press(key) - нажать клавишу
+    - type_text(text) - ввести текст
+    - scroll(direction, amount) - прокрутить
+    
+    Отвечай только JSON с действиями. Пример:
+    {"actions": [{"type": "click", "x": 400, "y": 300}], "description": "Кликнул на дверь"}
+
+game:
+  window_title: "Disco Elysium"  # Название окна игры
+  screenshot_interval: 1.0  # Интервал снятия скриншотов (сек)
+  action_delay: 0.5  # Задержка между действиями (сек)
+  screen_resolution:
+    width: 1280
+    height: 800
+
+vision:
+  describe_prompt: |
+    Опиши что происходит на этом скриншоте из игры Disco Elysium. 
+    Укажи:
+    - Где находится персонаж
+    - Что видно на экране
+    - Есть ли диалоги или интерфейс
+    - Какие действия возможны
+    
+    Отвечай кратко на русском языке.
+
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "logs/disco_coop.log"
+  max_size: "10MB"
+  backup_count: 5
+
+security:
+  rate_limit: 10  # Команд в минуту на чат
+  emergency_stop_command: "/stop_game"
+  max_session_time: 180  # Максимальное время сессии (минуты)
