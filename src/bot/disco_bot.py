@@ -48,10 +48,10 @@ class DiscoCoopBot:
     def _setup_handlers(self):
         """Настройка обработчиков команд и сообщений"""
         # Команда /start
-        self.app.add_handler(CommandHandler("start", self.start_command))
+        self.application.add_handler(CommandHandler("start", self.start_command))
         
         # Основной обработчик игровых команд - работает в личке, на упоминания и ответы
-        self.app.add_handler(MessageHandler(
+        self.application.add_handler(MessageHandler(
             (filters.ChatType.PRIVATE | filters.Entity("mention") | filters.REPLY) & filters.TEXT & ~filters.COMMAND,
             self.handle_game_command
         ))
