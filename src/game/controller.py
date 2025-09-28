@@ -5,10 +5,23 @@ import asyncio
 import platform
 import time
 from typing import List, Dict, Any, Optional
-import pyautogui
-from pynput import mouse, keyboard
-from pynput.mouse import Button, Listener as MouseListener
-from pynput.keyboard import Key, Listener as KeyboardListener
+
+# Пытаемся импортировать пакеты управления вводом
+try:
+    import pyautogui
+    PYAUTOGUI_AVAILABLE = True
+except ImportError:
+    PYAUTOGUI_AVAILABLE = False
+    pyautogui = None
+
+try:
+    from pynput import mouse, keyboard
+    from pynput.mouse import Button, Listener as MouseListener  
+    from pynput.keyboard import Key, Listener as KeyboardListener
+    PYNPUT_AVAILABLE = True
+except ImportError:
+    PYNPUT_AVAILABLE = False
+    mouse = keyboard = Button = MouseListener = Key = KeyboardListener = None
 
 from ..utils.config import Config
 
@@ -23,29 +36,39 @@ class GameController:
         self.is_active = False
         self.emergency_stop = False
         
+        # Проверяем доступность библиотек
+        if not PYAUTOGUI_AVAILABLE:
+            raise ImportError("PyAutoGUI не установлен. Установите его командой: pip install PyAutoGUI")
+        
+        if not PYNPUT_AVAILABLE:
+            print("⚠️  Внимание: pynput недоступен. Некоторые функции могут не работать.")
+        
         # Настройки PyAutoGUI
         pyautogui.PAUSE = config.game.action_delay
         pyautogui.FAILSAFE = True  # Перемещение мыши в угол останавливает выполнение
         
-        # Маппинг клавиш
-        self.key_mapping = {
-            'space': ' ',
-            'enter': '\n',
-            'tab': '\t',
-            'escape': Key.esc,
-            'up': Key.up,
-            'down': Key.down,
-            'left': Key.left,
-            'right': Key.right,
-            'f1': Key.f1,
-            'f2': Key.f2,
-            'f3': Key.f3,
-            'f4': Key.f4,
-            'f5': Key.f5,
-            'ctrl': Key.ctrl,
-            'alt': Key.alt,
-            'shift': Key.shift,
-        }
+        # Маппинг клавиш (только если pynput доступен)
+        if PYNPUT_AVAILABLE:
+            self.key_mapping = {
+                'space': ' ',
+                'enter': '\n',
+                'tab': '\t',
+                'escape': Key.esc,
+                'up': Key.up,
+                'down': Key.down,
+                'left': Key.left,
+                'right': Key.right,
+                'f1': Key.f1,
+                'f2': Key.f2,
+                'f3': Key.f3,
+                'f4': Key.f4,
+                'f5': Key.f5,
+                'ctrl': Key.ctrl,
+                'alt': Key.alt,
+                'shift': Key.shift,
+            }
+        else:
+            self.key_mapping = {}
     
     def is_game_running(self) -> bool:
         """

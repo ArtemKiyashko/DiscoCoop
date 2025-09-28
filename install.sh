@@ -200,6 +200,9 @@ install_package "loguru==0.7.2" "loguru>=0.7.0" "true"
 install_package "Pillow==10.1.0" "Pillow>=9.0.0" "true"
 install_package "requests==2.31.0" "requests>=2.28.0" "true"
 
+# Устанавливаем базовые зависимости для pynput
+install_package "six" "" "false"
+
 # Установка дополнительных зависимостей (более мягко)
 echo "📦 Установка дополнительных зависимостей..."
 
@@ -215,12 +218,12 @@ if ! pip install PyAutoGUI --no-cache-dir; then
     echo "  ⚠️  PyAutoGUI пропущен (не критично - можно установить позже)"
 fi
 
-# pynput - проблемы с evdev на Steam Deck, пробуем без evdev
+# pynput - проблемы с evdev на Steam Deck, пробуем разные варианты
 echo "  Установка pynput..."
 if pip install pynput --no-cache-dir; then
     echo "  ✅ pynput установлен"
-elif pip install pynput --no-deps --no-cache-dir; then
-    echo "  ✅ pynput установлен (без зависимостей)"
+elif pip install six --no-cache-dir && pip install pynput --no-deps --no-cache-dir; then
+    echo "  ✅ pynput установлен (с минимальными зависимостями)"
 else
     echo "  ⚠️  pynput пропущен (проблемы с evdev на Steam Deck - не критично)"
 fi
@@ -684,6 +687,27 @@ try:
     print('✅ Основные зависимости установлены')
 except ImportError as e:
     print(f'❌ Отсутствуют зависимости: {e}')
+
+# Проверяем дополнительные зависимости
+try:
+    import pynput
+    print('✅ pynput доступен')
+except ImportError as e:
+    print(f'⚠️  pynput недоступен: {e}')
+    
+try:
+    import pyautogui
+    print('✅ pyautogui доступен')
+except ImportError as e:
+    print(f'⚠️  pyautogui недоступен: {e}')
+
+# Проверяем импорт GameController
+try:
+    from src.game.controller import GameController
+    print('✅ GameController импортируется')
+except ImportError as e:
+    print(f'❌ Ошибка импорта GameController: {e}')
+    print('💡 Попробуйте запустить: ./fix_pynput.sh')
 "
 
 # Проверка Ollama

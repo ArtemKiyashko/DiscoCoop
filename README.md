@@ -149,8 +149,9 @@ curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/insta
 
 **Проблемы с pynput/evdev:**
 - На Steam Deck часто возникают проблемы с evdev
+- Ошибка `ModuleNotFoundError: No module named 'six'` - отсутствует зависимость
+- **Решение:** `./fix_pynput.sh` или `pip install six`
 - Пакет не критичен для базовой функциональности
-- Можно доустановить позже: `pip install pynput --no-deps`
 
 **Проблемы с Pillow/aiohttp:**
 - Скрипт пробует разные версии
