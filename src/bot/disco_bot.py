@@ -46,26 +46,15 @@ class DiscoCoopBot:
         self._setup_handlers()
     
     def _setup_handlers(self):
-        """Настройка обработчиков команд"""
-        # Команды
-        self.application.add_handler(CommandHandler("start", self.start_command))
-        self.application.add_handler(CommandHandler("help", self.help_command))
-        self.application.add_handler(CommandHandler("describe", self.describe_command))
-        self.application.add_handler(CommandHandler("status", self.status_command))
-        self.application.add_handler(CommandHandler("stop_game", self.emergency_stop))
+        """Настройка обработчиков команд и сообщений"""
+        # Команда /start
+        self.app.add_handler(CommandHandler("start", self.start_command))
         
-        # Обработка текстовых сообщений как игровых команд
-        # В группах: только если сообщение упоминает бота или отвечает на сообщение бота
-        # В приватных чатах: все текстовые сообщения
-        self.application.add_handler(
-            MessageHandler(
-                (filters.TEXT & ~filters.COMMAND) & 
-                (filters.ChatType.PRIVATE | 
-                 filters.MENTION | 
-                 filters.REPLY),
-                self.handle_game_command
-            )
-        )
+        # Основной обработчик игровых команд - работает в личке, на упоминания и ответы
+        self.app.add_handler(MessageHandler(
+            (filters.ChatType.PRIVATE | filters.Entity("mention") | filters.REPLY) & filters.TEXT & ~filters.COMMAND,
+            self.handle_game_command
+        ))
         
         # Обработка callback-ов от inline клавиатуры
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
