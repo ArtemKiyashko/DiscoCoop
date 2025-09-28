@@ -11,9 +11,15 @@ echo "🎮 Запуск Disco Coop Bot..."
 cd "$(dirname "$0")"
 
 # Проверяем наличие конфигурации
-if [ ! -f "config.yaml" ]; then
-    echo "❌ Файл config.yaml не найден!"
-    echo "📝 Скопируйте config.yaml.example в config.yaml и настройте его"
+if [ ! -f "config/config.yaml" ]; then
+    echo "❌ Файл config/config.yaml не найден!"
+    if [ -f "config/config.example.yaml" ]; then
+        echo "📝 Создайте конфигурацию:"
+        echo "   cp config/config.example.yaml config/config.yaml"
+        echo "   nano config/config.yaml  # настройте Telegram bot token и chat IDs"
+    else
+        echo "📝 Файл config.example.yaml тоже не найден!"
+    fi
     exit 1
 fi
 
