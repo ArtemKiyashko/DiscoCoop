@@ -1,12 +1,20 @@
+# Core dependencies
 python-telegram-bot==20.7
-ollama==0.3.1
-PyAutoGUI==0.9.54
-pynput==1.7.7
-Pillow==10.1.0
-opencv-python==4.8.1.78
-numpy==1.25.2
-pyyaml==6.0.1
-asyncio==3.4.3
 aiohttp==3.9.1
+pyyaml==6.0.1
 loguru==0.7.2
 python-dotenv==1.0.0
+
+# Image processing
+Pillow==10.1.0
+
+# Computer vision (optional, can be skipped if issues)
+opencv-python-headless==4.8.1.78
+numpy==1.25.2
+
+# Input automation (may need system packages)
+PyAutoGUI==0.9.54
+pynput==1.7.7
+
+# LLM integration
+# ollama  # Install via: pip install ollama OR curl -fsSL https://ollama.ai/install.sh | sh

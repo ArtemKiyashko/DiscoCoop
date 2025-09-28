@@ -11,15 +11,38 @@
    - Установите пароль для пользователя deck: `passwd`
 
 2. **Установите Python и зависимости:**
+   
+   **⚠️ Важно**: SteamOS имеет read-only файловую систему. Нужно разблокировать её:
    ```bash
-   # Обновляем систему
-   sudo pacman -Syu
+   # Переключаем файловую систему в режим записи
+   sudo steamos-readonly disable
+   
+   # Инициализируем keyring для pacman
+   sudo pacman-key --init
+   sudo pacman-key --populate archlinux
+   
+   # Обновляем базу данных пакетов (без обновления системы)
+   sudo pacman -Sy
    
    # Устанавливаем Python и pip
    sudo pacman -S python python-pip git
    
    # Устанавливаем дополнительные зависимости для GUI
    sudo pacman -S tk xdotool imagemagick
+   
+   # Возвращаем файловую систему в read-only режим (рекомендуется)
+   sudo steamos-readonly enable
+   ```
+   
+   **Альтернативный способ (если pacman не работает):**
+   ```bash
+   # Используем Flatpak для установки Python (если доступно)
+   flatpak install flathub org.freedesktop.Platform.Runtime//22.08
+   
+   # Или загружаем Python напрямую
+   curl -L https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz -o python.tar.gz
+   tar -xzf python.tar.gz -C ~/
+   export PATH="$HOME/python/bin:$PATH"
    ```
 
 ### 2. Установка Ollama
@@ -72,7 +95,17 @@ source venv/bin/activate
 ### 3. Установка зависимостей
 
 ```bash
+# Обновляем pip
+pip install --upgrade pip
+
+# Устанавливаем зависимости
 pip install -r requirements.txt
+
+# Если возникают проблемы с некоторыми пакетами, устанавливаем их отдельно
+pip install --user python-telegram-bot pillow pyyaml loguru aiohttp
+
+# Для Steam Deck может потребоваться установка через --user
+pip install --user -r requirements.txt
 ```
 
 ### 4. Настройка конфигурации
@@ -220,6 +253,29 @@ llm:
 ```
 
 ## Решение проблем
+
+### Проблема: Ошибки pacman на Steam Deck
+```bash
+# Если "failed to synchronize all databases"
+sudo steamos-readonly disable
+sudo pacman-key --init
+sudo pacman-key --populate archlinux
+sudo pacman -Sy
+
+# Если всё ещё не работает, используйте альтернативную установку Python
+curl -L https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz -o python.tar.gz
+tar -xzf python.tar.gz -C ~/
+echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Проблема: "steamos-readonly command not found"
+Если команда недоступна, значит у вас другой дистрибутив Linux:
+```bash
+# Используйте обычные команды Linux
+sudo apt update && sudo apt install python3 python3-pip git  # Ubuntu/Debian
+sudo dnf install python3 python3-pip git  # Fedora
+```
 
 ### Проблема: Бот не отвечает
 ```bash

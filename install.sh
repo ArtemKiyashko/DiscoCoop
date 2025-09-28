@@ -33,7 +33,38 @@ fi
 
 # Установка системных зависимостей
 echo "📦 Установка системных зависимостей..."
-sudo pacman -S --needed python python-pip git tk xdotool imagemagick
+
+# Проверяем, работает ли pacman
+if command -v pacman &> /dev/null; then
+    echo "🔓 Разблокировка файловой системы Steam Deck..."
+    sudo steamos-readonly disable 2>/dev/null || true
+    
+    echo "🔑 Инициализация keyring..."
+    sudo pacman-key --init 2>/dev/null || true
+    sudo pacman-key --populate archlinux 2>/dev/null || true
+    
+    echo "📥 Обновление базы данных пакетов..."
+    sudo pacman -Sy --noconfirm
+    
+    echo "📦 Установка пакетов..."
+    sudo pacman -S --needed --noconfirm python python-pip git tk xdotool imagemagick
+    
+    echo "🔒 Возвращение файловой системы в read-only режим..."
+    sudo steamos-readonly enable 2>/dev/null || true
+else
+    echo "⚠️  pacman недоступен, используем альтернативные методы..."
+    
+    # Проверяем Python
+    if ! command -v python3 &> /dev/null; then
+        echo "📥 Загрузка переносимой версии Python..."
+        cd /tmp
+        curl -L https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz -o python.tar.gz
+        tar -xzf python.tar.gz -C "$HOME"
+        export PATH="$HOME/python/bin:$PATH"
+        echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.bashrc
+        cd "$PROJECT_DIR"
+    fi
+fi
 
 # Создание виртуального окружения
 echo "🐍 Создание виртуального окружения..."
@@ -43,7 +74,21 @@ source venv/bin/activate
 # Установка Python зависимостей
 echo "📚 Установка Python пакетов..."
 pip install --upgrade pip
-pip install -r requirements.txt
+
+# Проверяем, работает ли полная установка
+echo "🔄 Попытка установки всех зависимостей..."
+if pip install -r requirements.txt; then
+    echo "✅ Все зависимости установлены успешно"
+else
+    echo "⚠️  Ошибка при установке полных зависимостей, используем минимальный набор..."
+    pip install -r requirements-minimal.txt
+    
+    echo "📦 Попытка установки дополнительных зависимостей..."
+    pip install --user opencv-python-headless || echo "⚠️  OpenCV пропущен"
+    pip install --user PyAutoGUI || echo "⚠️  PyAutoGUI пропущен"
+    pip install --user pynput || echo "⚠️  pynput пропущен"
+    pip install --user numpy || echo "⚠️  numpy пропущен"
+fi
 
 # Установка и настройка Ollama
 echo "🤖 Установка Ollama..."
