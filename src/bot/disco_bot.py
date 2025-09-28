@@ -7,12 +7,13 @@ import time
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InlineQueryResultArticle, InputTextMessageContent
 from telegram.ext import (
     Application, 
     CommandHandler, 
     MessageHandler, 
     CallbackQueryHandler,
+    InlineQueryHandler,
     filters,
     ContextTypes
 )
@@ -50,11 +51,24 @@ class DiscoCoopBot:
         # Команда /start
         self.application.add_handler(CommandHandler("start", self.start_command))
         
-        # Основной обработчик - обрабатывает все текстовые сообщения
+        # Команда /game для игровых действий (работает в группах)
+        self.application.add_handler(CommandHandler("game", self.game_command))
+        
+        # Обработчик для личных сообщений (все текстовые)
         self.application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
-            self.handle_message
+            filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND,
+            self.handle_private_message
         ))
+        
+        # Обработчик для групп - только упоминания и ответы (из-за Privacy Mode)
+        self.application.add_handler(MessageHandler(
+            (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & 
+            filters.TEXT & ~filters.COMMAND,
+            self.handle_group_message
+        ))
+        
+        # Inline обработчик для групп
+        self.application.add_handler(InlineQueryHandler(self.handle_inline_query))
         
         # Обработка callback-ов от inline клавиатуры
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
@@ -220,31 +234,58 @@ class DiscoCoopBot:
         
         await update.message.reply_text(status_text, parse_mode='Markdown')
     
-    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Универсальный обработчик сообщений"""
-        chat_type = update.effective_chat.type
+    async def handle_private_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик личных сообщений"""
+        await self.handle_game_command(update, context)
+    
+    async def handle_group_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик сообщений в группах (только упоминания/ответы из-за Privacy Mode)"""
+        chat_id = update.effective_chat.id
+        chat_title = getattr(update.effective_chat, 'title', 'Group')
         message_text = update.message.text
+        user_name = update.effective_user.username or update.effective_user.first_name
         
-        # В личных чатах обрабатываем все сообщения
-        if chat_type == 'private':
-            await self.handle_game_command(update, context)
-            return
+        logger.info(f"📩 Сообщение в группе {chat_title} (ID: {chat_id}) от {user_name}")
+        logger.info(f"   Текст: {message_text[:100]}...")
         
-        # В группах обрабатываем только упоминания и ответы
-        if chat_type in ['group', 'supergroup']:
-            bot_info = await context.bot.get_me()
-            bot_username = bot_info.username
-            
-            # Проверяем упоминание бота или ответ на сообщение бота
-            is_mention = f'@{bot_username}' in message_text
-            is_reply_to_bot = (update.message.reply_to_message and 
-                             update.message.reply_to_message.from_user.id == bot_info.id)
-            
-            if is_mention or is_reply_to_bot:
-                logger.info(f"🔍 Сообщение для бота в группе: mention={is_mention}, reply={is_reply_to_bot}")
-                await self.handle_game_command(update, context)
-            else:
-                logger.debug(f"🔇 Игнорируем сообщение в группе без упоминания бота")
+        # В Group Privacy Mode бот получает только упоминания и ответы
+        # Обрабатываем все что получили
+        await self.handle_game_command(update, context)
+    
+    async def game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда /game для игровых действий в группах"""
+        command_args = " ".join(context.args) if context.args else "описать экран"
+        
+        # Создаем псевдо-сообщение с командой
+        original_text = update.message.text
+        update.message.text = command_args
+        
+        logger.info(f"🎮 Команда /game: {command_args}")
+        await self.handle_game_command(update, context)
+        
+        # Восстанавливаем оригинальный текст
+        update.message.text = original_text
+    
+    async def handle_inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик inline запросов для групп"""
+        query = update.inline_query.query
+        if not query:
+            query = "описать экран"
+        
+        logger.info(f"🔍 Inline запрос: {query}")
+        
+        results = [
+            InlineQueryResultArticle(
+                id="game_action",
+                title=f"🎮 Выполнить: {query}",
+                description="Нажмите чтобы выполнить игровое действие",
+                input_message_content=InputTextMessageContent(
+                    message_text=f"/game {query}"
+                )
+            )
+        ]
+        
+        await update.inline_query.answer(results)
     
     async def handle_game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка игровых команд"""
