@@ -57,58 +57,25 @@
 
 **Автоматическая установка на Steam Deck:**
 ```bash
-# Основной скрипт установки (с обходом кэша)
-curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
-  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh?$(date +%s)" | bash
-
-# Если проблемы с pacman - упрощенный скрипт:
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install_simple.sh" | bash
-
-# Если критические проблемы - минимальный скрипт:
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install_minimal.sh" | bash
-
-# Исправление pacman (если нужно):
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh" | bash
-
-# Исправление Ollama на Steam Deck (если нужно):
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_ollama_steamdeck.sh" | bash
-
-# Переустановка Ollama (если файл поврежден):
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/reinstall_ollama.sh" | bash
+# 🚀 Универсальный скрипт - проверяет все зависимости, можно запускать многократно
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh" | bash
 ```
 
-**Ручная установка:**
+> 💡 **Один скрипт для всего:** Скрипт умеет обрабатывать все возможные проблемы и может запускаться многократно без вреда для системы.
+
+**Ручная установка (если автоматическая не подходит):**
 1. Клонируйте репозиторий:
 ```bash
 git clone https://github.com/ArtemKiyashko/DiscoCoop.git
 cd DiscoCoop
 ```
 
-2. Установите зависимости:
+2. Запустите скрипт установки:
 ```bash
-pip install -r requirements.txt
+./install.sh
 ```
 
-3. Настройте конфигурацию:
-```bash
-cp config/config.example.yaml config/config.yaml
-# Отредактируйте config.yaml с вашими настройками
-```
-
-4. Установите Ollama и модель:
-```bash
-# Обычная установка:
-curl -fsSL https://ollama.ai/install.sh | sh
-
-# Если проблемы на Steam Deck:
-./fix_ollama_steamdeck.sh
-
-# Загрузка моделей:
-ollama pull llama3.1:8b
-ollama pull llava:7b  # для анализа изображений
-```
-
-5. Запустите бота:
+> 💡 **Рекомендация:** Даже при ручной установке лучше использовать скрипт `install.sh` - он автоматически обработает все зависимости и настройки.
 ```bash
 python main.py
 ```
@@ -133,65 +100,45 @@ python main.py
 - Все команды логируются
 - Возможность экстренной остановки
 
-## Решение проблем на Steam Deck
+## Решение проблем
 
-### Проблема с externally-managed-environment
+### 🔄 Универсальное решение
 
-Если при установке Python пакетов вы получаете ошибку:
-```
-error: externally-managed-environment
-```
+При любых проблемах просто запустите скрипт установки повторно:
 
-**Решение: Используйте минимальный скрипт установки**
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install_minimal.sh" | bash
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh" | bash
 ```
 
-Этот скрипт использует портативный Python и обходит системные ограничения.
+**Скрипт автоматически:**
+- ✅ Определяет и исправляет проблемы с Python
+- ✅ Обходит ограничения `externally-managed-environment` 
+- ✅ Устанавливает Ollama локально при проблемах с правами
+- ✅ Исправляет PGP ключи pacman
+- ✅ Проверяет и доустанавливает недостающие зависимости
+- ✅ Настраивает systemd сервисы
+- ✅ Загружает необходимые модели ИИ
 
-### Проблема с установкой Ollama
+### 🐛 Если ничего не помогает
 
-Если при установке Ollama вы получаете ошибку:
-```
-install: cannot change owner and permissions of '/usr/local/lib/ollama': No such file or directory
-```
+1. **Удалите проект и начните заново:**
+   ```bash
+   rm -rf ~/disco_coop
+   curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh" | bash
+   ```
 
-**Решение: Установка Ollama в пользовательскую директорию**
-```bash
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_ollama_steamdeck.sh" | bash
-```
+2. **Проверьте логи системы:**
+   ```bash
+   sudo journalctl -u ollama.service -f
+   sudo journalctl -u disco-coop.service -f
+   ```
 
-### Проблема с поврежденным файлом Ollama
-
-Если Ollama установился, но при запуске выдает ошибку типа:
-```
-/home/deck/.local/bin/ollama: line 1: Not: command not found
-```
-
-Это означает, что вместо бинарного файла загрузилась HTML-страница или текст ошибки.
-
-**Решение: Переустановка Ollama**
-```bash
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/reinstall_ollama.sh" | bash
-```
-
-Или вручную:
-```bash
-rm -f ~/.local/bin/ollama
-mkdir -p ~/.local/bin
-curl -L https://github.com/ollama/ollama/releases/download/v0.12.3/ollama-linux-amd64.tgz -o /tmp/ollama.tgz
-tar -xzf /tmp/ollama.tgz -C /tmp/
-cp /tmp/bin/ollama ~/.local/bin/ollama  # или /tmp/ollama если структура другая
-chmod +x ~/.local/bin/ollama
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-### Проблема с PGP ключами pacman
-
-Если получаете ошибки PGP при установке пакетов:
-```bash
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh" | bash
-```
+3. **Используйте встроенную диагностику:**
+   ```bash
+   cd ~/disco_coop
+   ./test.sh
+   ./status.sh
+   ```
 
 ## Разработка
 
