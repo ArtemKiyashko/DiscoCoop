@@ -361,6 +361,26 @@ python3 --version
 pip3 --version
 ```
 
+### Проблема: "externally-managed-environment" (Python 3.13+)
+
+**Симптомы:**
+- `error: externally-managed-environment`
+- `This environment is externally managed`
+- Невозможно установить pip пакеты глобально
+
+**Причина:** Python 3.13+ имеет защиту от установки пакетов в системную среду (PEP 668)
+
+**Решение:**
+```bash
+# Всегда используйте виртуальное окружение
+python3 -m venv venv
+source venv/bin/activate
+pip install пакеты...
+
+# Или используйте минимальный скрипт установки
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install_minimal.sh" | bash
+```
+
 ### Проблема: "steamos-readonly command not found"
 Если команда недоступна, значит у вас другой дистрибутив Linux:
 ```bash

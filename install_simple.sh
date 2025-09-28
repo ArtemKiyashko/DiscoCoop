@@ -63,20 +63,33 @@ else
     echo "✅ Python уже установлен"
 fi
 
-# Проверяем pip
-if ! command -v pip &> /dev/null && ! command -v pip3 &> /dev/null; then
-    echo "📦 Установка pip..."
-    if command -v python3 &> /dev/null; then
-        python3 -m ensurepip --default-pip --user
-    elif command -v python &> /dev/null; then
-        python -m ensurepip --default-pip --user
-    fi
+# Определяем Python команду
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+elif [ -f "$HOME/python/bin/python3" ]; then
+    PYTHON_CMD="$HOME/python/bin/python3"
+    export PATH="$HOME/python/bin:$PATH"
+else
+    echo "❌ Python не найден после установки!"
+    exit 1
 fi
 
-# Создание виртуального окружения
+echo "🔧 Используем Python: $PYTHON_CMD"
+
+# Создание виртуального окружения (обязательно для избежания externally-managed-environment)
 echo "🐍 Создание виртуального окружения..."
-python3 -m venv venv || python -m venv venv
+if ! $PYTHON_CMD -m venv venv; then
+    echo "❌ Не удалось создать виртуальное окружение"
+    exit 1
+fi
+
 source venv/bin/activate
+
+# pip теперь доступен в виртуальном окружении
+echo "📚 Обновление pip..."
+python -m pip install --upgrade pip
 
 # Установка Python зависимостей
 echo "📚 Установка Python пакетов..."

@@ -118,43 +118,80 @@ if [ "$PACMAN_FAILED" = true ] || ! command -v python3 &> /dev/null && ! command
     fi
 fi
 
-# Проверяем pip
+# Проверяем pip (с учетом externally-managed-environment)
 if ! command -v pip &> /dev/null && ! command -v pip3 &> /dev/null; then
     echo "📦 pip не найден, устанавливаем..."
+    
+    # Пробуем разные методы установки pip
     if command -v python3 &> /dev/null; then
-        python3 -m ensurepip --default-pip --user
-    elif command -v python &> /dev/null; then
-        python -m ensurepip --default-pip --user
-    else
-        # Загружаем get-pip.py
-        curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py
-        python3 get-pip.py --user || python get-pip.py --user
-        rm get-pip.py
+        # Сначала пробуем обычную установку
+        if ! python3 -m ensurepip --default-pip --user 2>/dev/null; then
+            echo "⚠️  Системная среда защищена, загружаем get-pip.py..."
+            curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py
+            python3 get-pip.py --user --break-system-packages 2>/dev/null || \
+            python3 get-pip.py --user 2>/dev/null || \
+            echo "❌ Не удалось установить pip, но это не критично"
+            rm -f get-pip.py
+        fi
+    fi
+    
+    # Если всё ещё нет pip, пропускаем - будем использовать системный python
+    if ! command -v pip &> /dev/null && ! command -v pip3 &> /dev/null; then
+        echo "⚠️  pip недоступен, будем использовать переносимый Python"
     fi
 fi
 
-# Создание виртуального окружения
+# Создание виртуального окружения (обязательно для Steam Deck)
 echo "🐍 Создание виртуального окружения..."
-python -m venv venv
+
+# Определяем какой Python использовать
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+elif [ -f "$HOME/python/bin/python3" ]; then
+    PYTHON_CMD="$HOME/python/bin/python3"
+    export PATH="$HOME/python/bin:$PATH"
+else
+    echo "❌ Python не найден!"
+    exit 1
+fi
+
+echo "🔧 Используем: $PYTHON_CMD"
+
+# Создаем виртуальное окружение
+if ! $PYTHON_CMD -m venv venv; then
+    echo "❌ Не удалось создать виртуальное окружение"
+    exit 1
+fi
+
 source venv/bin/activate
 
-# Установка Python зависимостей
-echo "📚 Установка Python пакетов..."
-pip install --upgrade pip
+# Обновляем pip в виртуальном окружении
+echo "📚 Обновление pip в виртуальном окружении..."
+python -m pip install --upgrade pip
 
-# Проверяем, работает ли полная установка
-echo "🔄 Попытка установки всех зависимостей..."
-if pip install -r requirements.txt; then
-    echo "✅ Все зависимости установлены успешно"
-else
-    echo "⚠️  Ошибка при установке полных зависимостей, используем минимальный набор..."
-    pip install -r requirements-minimal.txt
+# Установка Python зависимостей
+echo "🔄 Установка Python пакетов..."
+
+# Сначала пробуем минимальные зависимости
+if pip install -r requirements-minimal.txt; then
+    echo "✅ Минимальные зависимости установлены"
     
+    # Пробуем дополнительные зависимости
     echo "📦 Попытка установки дополнительных зависимостей..."
-    pip install --user opencv-python-headless || echo "⚠️  OpenCV пропущен"
-    pip install --user PyAutoGUI || echo "⚠️  PyAutoGUI пропущен"
-    pip install --user pynput || echo "⚠️  pynput пропущен"
-    pip install --user numpy || echo "⚠️  numpy пропущен"
+    pip install opencv-python-headless || echo "⚠️  OpenCV пропущен"
+    pip install PyAutoGUI || echo "⚠️  PyAutoGUI пропущен"  
+    pip install pynput || echo "⚠️  pynput пропущен"
+    pip install numpy || echo "⚠️  numpy пропущен"
+else
+    echo "📦 Установка пакетов по одному..."
+    pip install python-telegram-bot || echo "❌ Не удалось установить python-telegram-bot"
+    pip install aiohttp || echo "❌ Не удалось установить aiohttp"
+    pip install pyyaml || echo "❌ Не удалось установить pyyaml"
+    pip install loguru || echo "❌ Не удалось установить loguru"
+    pip install Pillow || echo "❌ Не удалось установить Pillow"
+    pip install requests || echo "❌ Не удалось установить requests"
 fi
 
 # Установка и настройка Ollama
