@@ -8,7 +8,14 @@
 
 1. **Включите режим разработчика:**
    - Зайдите в Desktop Mode (режим рабочего стола)
-   - Установите пароль для пользователя deck: `passwd`
+   - Установите пароль для пользователя d# 5. Используйте упрощенный скрипт (обходит проблемы с pacman)
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install_simple.sh" | bash
+
+# 6. Используйте специальный скрипт для получения свежих версий
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/get_fresh_scripts.sh" | bash
+
+# 7. Очистите локальный кэш curl (если есть)
+rm -rf ~/.cache/curl* 2>/dev/null || true`passwd`
 
 2. **Установите Python и зависимости:**
    

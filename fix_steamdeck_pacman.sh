@@ -30,7 +30,11 @@ sudo pacman-key --recv-keys 3056513887B78AEB 2>/dev/null || true
 sudo pacman-key --lsign-key 3056513887B78AEB 2>/dev/null || true
 
 echo "🧹 Очистка кеша пакетов..."
-sudo pacman -Scc --noconfirm
+# Автоматически отвечаем "yes" на все вопросы об удалении поврежденных пакетов
+echo -e "y\ny" | sudo pacman -Scc 2>/dev/null || true
+
+echo "🗑️  Удаление поврежденных пакетов из кеша..."
+sudo find /var/cache/pacman/pkg/ -name "*.pkg.tar.zst" -type f -delete 2>/dev/null || true
 
 echo "📥 Обновление базы данных пакетов..."
 sudo pacman -Sy

@@ -61,9 +61,11 @@
 curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
   "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh?$(date +%s)" | bash
 
-# Если возникают проблемы с pacman, сначала запустите скрипт исправления:
-curl -fsSL -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
-  "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh?$(date +%s)" | bash
+# Если проблемы с pacman - используйте упрощенный скрипт:
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install_simple.sh" | bash
+
+# Если нужно исправить pacman:
+curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/fix_steamdeck_pacman.sh" | bash
 ```
 
 **Ручная установка:**
