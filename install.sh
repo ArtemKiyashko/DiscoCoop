@@ -4,6 +4,9 @@
 
 set -e  # Остановка при ошибке
 
+# URL репозитория
+REPOSITORY_URL="https://github.com/ArtemKiyashko/DiscoCoop.git"
+
 echo "🎮 Disco Coop - Установка на Steam Deck"
 echo "========================================"
 
@@ -24,7 +27,7 @@ if [ -d "$PROJECT_DIR" ]; then
 else
     echo "📥 Клонирование репозитория..."
     cd "$HOME"
-    git clone <REPOSITORY_URL> disco_coop
+    git clone "$REPOSITORY_URL" disco_coop
     cd disco_coop
 fi
 

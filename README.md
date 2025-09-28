@@ -1,5 +1,9 @@
 # Disco Coop - Кооперативная игра в Disco Elysium через Telegram
 
+![Python](https://img.shields.io/badge/python-v3.8+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-green.svg)
+![Platform](https://img.shields.io/badge/platform-SteamDeck%20%7C%20Linux%20%7C%20Windows%20%7C%20macOS-lightgrey.svg)
+
 Система для совместной игры в Disco Elysium через Telegram чат с использованием Steam Deck и локальной LLM.
 
 ## Архитектура
@@ -53,8 +57,8 @@
 
 1. Клонируйте репозиторий:
 ```bash
-git clone <repo-url>
-cd disco_coop
+git clone https://github.com/ArtemKiyashko/DiscoCoop.git
+cd DiscoCoop
 ```
 
 2. Установите зависимости:

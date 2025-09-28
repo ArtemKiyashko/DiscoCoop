@@ -25,8 +25,10 @@
 ### 2. Установка Ollama
 
 ```bash
-# Скачиваем и устанавливаем Ollama
-curl -fsSL https://ollama.ai/install.sh | sh
+```bash
+# Скачайте и запустите скрипт установки
+curl -fsSL https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh | bash
+```
 
 # Запускаем Ollama как сервис
 sudo systemctl enable ollama
@@ -56,7 +58,7 @@ ollama pull llava:7b           # Модель для анализа изобра
 
 ```bash
 cd ~
-git clone <repository-url> disco_coop
+git clone https://github.com/ArtemKiyashko/DiscoCoop.git disco_coop
 cd disco_coop
 ```
 
