@@ -50,20 +50,10 @@ class DiscoCoopBot:
         # Команда /start
         self.application.add_handler(CommandHandler("start", self.start_command))
         
-        # Основной обработчик игровых команд - работает в личке, на упоминания и ответы
+        # Основной обработчик - обрабатывает все текстовые сообщения
         self.application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & (
-                filters.ChatType.PRIVATE | 
-                filters.Entity("mention") | 
-                filters.REPLY
-            ),
-            self.handle_game_command
-        ))
-        
-        # Дополнительный обработчик для групп - ловит сообщения с упоминанием бота
-        self.application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND & (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP),
-            self.handle_group_mention
+            filters.TEXT & ~filters.COMMAND,
+            self.handle_message
         ))
         
         # Обработка callback-ов от inline клавиатуры
@@ -230,17 +220,31 @@ class DiscoCoopBot:
         
         await update.message.reply_text(status_text, parse_mode='Markdown')
     
-    async def handle_group_mention(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка упоминаний в группах и супергруппах"""
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Универсальный обработчик сообщений"""
+        chat_type = update.effective_chat.type
         message_text = update.message.text
-        bot_info = await context.bot.get_me()
-        bot_username = bot_info.username
         
-        # Проверяем, есть ли упоминание бота в сообщении
-        if f'@{bot_username}' in message_text:
-            logger.info(f"🔍 Обнаружено упоминание @{bot_username} в группе")
-            # Передаем обработку основному обработчику
+        # В личных чатах обрабатываем все сообщения
+        if chat_type == 'private':
             await self.handle_game_command(update, context)
+            return
+        
+        # В группах обрабатываем только упоминания и ответы
+        if chat_type in ['group', 'supergroup']:
+            bot_info = await context.bot.get_me()
+            bot_username = bot_info.username
+            
+            # Проверяем упоминание бота или ответ на сообщение бота
+            is_mention = f'@{bot_username}' in message_text
+            is_reply_to_bot = (update.message.reply_to_message and 
+                             update.message.reply_to_message.from_user.id == bot_info.id)
+            
+            if is_mention or is_reply_to_bot:
+                logger.info(f"🔍 Сообщение для бота в группе: mention={is_mention}, reply={is_reply_to_bot}")
+                await self.handle_game_command(update, context)
+            else:
+                logger.debug(f"🔇 Игнорируем сообщение в группе без упоминания бота")
     
     async def handle_game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка игровых команд"""
