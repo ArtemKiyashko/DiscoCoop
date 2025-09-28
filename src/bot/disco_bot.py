@@ -54,7 +54,7 @@ class DiscoCoopBot:
         self.application.add_handler(MessageHandler(
             filters.TEXT & ~filters.COMMAND & (
                 filters.ChatType.PRIVATE | 
-                filters.MENTION | 
+                filters.Entity("mention") | 
                 filters.REPLY
             ),
             self.handle_game_command
