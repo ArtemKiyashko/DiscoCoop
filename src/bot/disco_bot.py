@@ -239,36 +239,50 @@ class DiscoCoopBot:
         await self.handle_game_command(update, context)
     
     async def handle_group_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик сообщений в группах (только упоминания/ответы из-за Privacy Mode)"""
+        """Обработчик сообщений в группах (фильтруем упоминания и команды)"""
         chat_id = update.effective_chat.id
         chat_title = getattr(update.effective_chat, 'title', 'Group')
-        message_text = update.message.text
+        message_text = update.message.text or ""
         user_name = update.effective_user.username or update.effective_user.first_name
         
-        logger.info(f"📩 Сообщение в группе {chat_title} (ID: {chat_id}) от {user_name}")
-        logger.info(f"   Текст: {message_text[:100]}...")
+        # Получаем информацию о боте
+        bot_info = await context.bot.get_me()
+        bot_username = bot_info.username
         
-        # В Group Privacy Mode бот получает только упоминания и ответы
-        # Обрабатываем все что получили
-        await self.handle_game_command(update, context)
+        # Проверяем что сообщение адресовано боту
+        is_mention = f'@{bot_username}' in message_text
+        is_reply_to_bot = (update.message.reply_to_message and 
+                         update.message.reply_to_message.from_user.id == bot_info.id)
+        is_command = message_text.startswith('/')
+        
+        logger.debug(f"📩 Сообщение в группе {chat_title}: {message_text[:50]}...")
+        logger.debug(f"   Упоминание: {is_mention}, Ответ: {is_reply_to_bot}, Команда: {is_command}")
+        
+        # Обрабатываем только если сообщение адресовано боту
+        if is_mention or is_reply_to_bot or is_command:
+            logger.info(f"✅ Обрабатываем сообщение в группе от {user_name}")
+            await self.handle_game_command(update, context)
+        else:
+            logger.debug(f"🔇 Игнорируем сообщение в группе - не адресовано боту")
     
     async def game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Команда /game для игровых действий в группах"""
         command_args = " ".join(context.args) if context.args else "описать экран"
         
-        # Создаем псевдо-сообщение с командой
-        original_text = update.message.text
-        update.message.text = command_args
-        
         logger.info(f"🎮 Команда /game: {command_args}")
-        await self.handle_game_command(update, context)
         
-        # Восстанавливаем оригинальный текст
-        update.message.text = original_text
+        # Обрабатываем команду напрямую
+        await self.process_game_action(update, context, command_args)
     
     async def handle_inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик inline запросов для групп"""
-        query = update.inline_query.query
+        query = update.inline_query.query.strip()
+        
+        # Игнорируем слишком короткие запросы (пока пользователь еще печатает)
+        if len(query) < 3:
+            await update.inline_query.answer([])
+            return
+        
         if not query:
             query = "описать экран"
         
@@ -287,36 +301,20 @@ class DiscoCoopBot:
         
         await update.inline_query.answer(results)
     
-    async def handle_game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка игровых команд"""
+    async def process_game_action(self, update: Update, context: ContextTypes.DEFAULT_TYPE, user_command: str):
+        """Общая логика обработки игровых действий"""
         chat_id = update.effective_chat.id
-        user_command = update.message.text
         chat_type = update.effective_chat.type
         chat_title = getattr(update.effective_chat, 'title', 'Private Chat')
         user_name = update.effective_user.username or update.effective_user.first_name
         
-        # Логируем все входящие сообщения
-        logger.info(f"📨 Сообщение получено:")
+        # Логируем команду
+        logger.info(f"🎮 Обработка игрового действия:")
         logger.info(f"   Chat ID: {chat_id}")
         logger.info(f"   Chat Type: {chat_type}")
         logger.info(f"   Chat Title: {chat_title}")
         logger.info(f"   User: {user_name} (ID: {update.effective_user.id})")
-        logger.info(f"   Message: {user_command[:100]}...")
-        
-        # В группах очищаем упоминание бота из команды
-        if chat_type in ['group', 'supergroup']:
-            # Получаем информацию о боте
-            bot_info = await context.bot.get_me()
-            bot_username = bot_info.username
-            
-            # Убираем упоминание бота из начала сообщения
-            if user_command.startswith(f'@{bot_username}'):
-                user_command = user_command[len(f'@{bot_username}'):].strip()
-                logger.info(f"   Очищенная команда: {user_command}")
-            
-            # Если сообщение было пустым после удаления упоминания, используем дефолтную команду
-            if not user_command:
-                user_command = "описать экран"
+        logger.info(f"   Command: {user_command}")
         
         if not self._is_authorized_chat(chat_id):
             logger.warning(f"🚫 Доступ запрещен для чата {chat_id} ({chat_title})")
@@ -358,6 +356,29 @@ class DiscoCoopBot:
         except Exception as e:
             logger.error(f"Error processing command '{user_command}': {e}")
             await processing_msg.edit_text("❌ Ошибка при выполнении команды.")
+    
+    async def handle_game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка игровых команд из обычных сообщений"""
+        user_command = update.message.text
+        chat_type = update.effective_chat.type
+        
+        # В группах очищаем упоминание бота из команды
+        if chat_type in ['group', 'supergroup']:
+            # Получаем информацию о боте
+            bot_info = await context.bot.get_me()
+            bot_username = bot_info.username
+            
+            # Убираем упоминание бота из начала сообщения
+            if user_command.startswith(f'@{bot_username}'):
+                user_command = user_command[len(f'@{bot_username}'):].strip()
+                logger.info(f"   Очищенная команда: {user_command}")
+            
+            # Если сообщение было пустым после удаления упоминания, используем дефолтную команду
+            if not user_command:
+                user_command = "описать экран"
+        
+        # Передаем в общую функцию обработки
+        await self.process_game_action(update, context, user_command)
     
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка нажатий inline кнопок"""
