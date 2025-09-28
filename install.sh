@@ -146,42 +146,144 @@ fi
 
 source venv/bin/activate
 
-# Обновляем pip в виртуальном окружении
-echo "📚 Обновление pip в виртуальном окружении..."
+# Обновляем pip и устанавливаем инструменты сборки
+echo "📚 Обновление pip и установка инструментов сборки..."
 python -m pip install --upgrade pip
+python -m pip install --upgrade setuptools wheel build
+
+# Устанавливаем системные зависимости для сборки пакетов, если нужно
+if [ "$PACMAN_FAILED" = false ] && command -v pacman &> /dev/null; then
+    echo "🔧 Установка дополнительных инструментов сборки..."
+    sudo steamos-readonly disable 2>/dev/null || true
+    timeout 120 bash -c 'yes "y" | sudo pacman -S --needed --noconfirm gcc python-devel libffi-devel openssl-devel' 2>/dev/null || echo "⚠️  Дополнительные инструменты не установлены"
+    sudo steamos-readonly enable 2>/dev/null || true
+fi
 
 # Установка Python зависимостей
 echo "🔄 Установка Python пакетов..."
 
-# Критичные зависимости
-CRITICAL_PACKAGES=(
-    "python-telegram-bot==20.7"
-    "aiohttp==3.9.1"
-    "pyyaml==6.0.1"
-    "loguru==0.7.2"
-    "Pillow==10.1.0"
-    "requests==2.31.0"
-)
+# Функция для надежной установки пакетов
+install_package() {
+    local package="$1"
+    local backup_package="$2"
+    local is_critical="$3"
+    
+    echo "  Установка $package..."
+    
+    if pip install "$package" --no-cache-dir; then
+        echo "  ✅ $package установлен"
+        return 0
+    elif [ ! -z "$backup_package" ]; then
+        echo "  ⚠️  Пробуем альтернативную версию: $backup_package"
+        if pip install "$backup_package" --no-cache-dir; then
+            echo "  ✅ $backup_package установлен"
+            return 0
+        fi
+    fi
+    
+    if [ "$is_critical" = "true" ]; then
+        echo "  ❌ Не удалось установить критичный пакет $package"
+        return 1
+    else
+        echo "  ⚠️  $package пропущен (не критично)"
+        return 0
+    fi
+}
 
-# Дополнительные зависимости (не критичные)
-OPTIONAL_PACKAGES=(
-    "opencv-python-headless"
-    "PyAutoGUI"
-    "pynput"
-    "numpy"
-)
-
+# Установка критичных зависимостей с fallback версиями
 echo "📦 Установка критичных зависимостей..."
-for package in "${CRITICAL_PACKAGES[@]}"; do
-    echo "  Установка $package..."
-    pip install "$package" || echo "  ❌ Не удалось установить $package"
-done
 
+install_package "python-telegram-bot==20.7" "python-telegram-bot>=20.0,<21.0" "true"
+install_package "aiohttp==3.9.1" "aiohttp>=3.8.0" "true"
+install_package "pyyaml==6.0.1" "pyyaml>=6.0" "true"
+install_package "loguru==0.7.2" "loguru>=0.7.0" "true"
+install_package "Pillow==10.1.0" "Pillow>=9.0.0" "true"
+install_package "requests==2.31.0" "requests>=2.28.0" "true"
+
+# Установка дополнительных зависимостей (более мягко)
 echo "📦 Установка дополнительных зависимостей..."
-for package in "${OPTIONAL_PACKAGES[@]}"; do
-    echo "  Установка $package..."
-    pip install "$package" || echo "  ⚠️  $package пропущен (не критично)"
-done
+
+# OpenCV - пробуем разные варианты
+if ! pip install opencv-python-headless --no-cache-dir; then
+    if ! pip install opencv-python --no-cache-dir; then
+        echo "  ⚠️  OpenCV пропущен (не критично)"
+    fi
+fi
+
+# PyAutoGUI - часто проблемы на Steam Deck
+if ! pip install PyAutoGUI --no-cache-dir; then
+    echo "  ⚠️  PyAutoGUI пропущен (не критично - можно установить позже)"
+fi
+
+# pynput - проблемы с evdev на Steam Deck, пробуем без evdev
+echo "  Установка pynput..."
+if pip install pynput --no-cache-dir; then
+    echo "  ✅ pynput установлен"
+elif pip install pynput --no-deps --no-cache-dir; then
+    echo "  ✅ pynput установлен (без зависимостей)"
+else
+    echo "  ⚠️  pynput пропущен (проблемы с evdev на Steam Deck - не критично)"
+fi
+
+# numpy - обычно устанавливается без проблем
+install_package "numpy" "" "false"
+
+echo "📦 Проверка установки базовых зависимостей..."
+python -c "
+import sys
+failed = []
+try:
+    import telegram
+    print('✅ telegram импортируется')
+except ImportError:
+    failed.append('python-telegram-bot')
+    print('❌ telegram не импортируется')
+
+try:
+    import aiohttp
+    print('✅ aiohttp импортируется')
+except ImportError:
+    failed.append('aiohttp')
+    print('❌ aiohttp не импортируется')
+
+try:
+    from PIL import Image
+    print('✅ Pillow импортируется')
+except ImportError:
+    failed.append('Pillow')
+    print('❌ Pillow не импортируется')
+
+try:
+    import yaml
+    print('✅ yaml импортируется')
+except ImportError:
+    failed.append('pyyaml')
+    print('❌ yaml не импортируется')
+
+try:
+    import loguru
+    print('✅ loguru импортируется')
+except ImportError:
+    failed.append('loguru')
+    print('❌ loguru не импортируется')
+
+if failed:
+    print(f'⚠️  Некоторые критичные пакеты не установились: {failed}')
+    print('🔄 Пробуем установить через requirements.txt...')
+    sys.exit(2)  # Сигнал для bash скрипта
+else:
+    print('✅ Все критичные зависимости установлены успешно!')
+"
+
+# Если проверка не прошла, пробуем установить через requirements.txt
+if [ $? -eq 2 ]; then
+    echo "🔄 Пробуем альтернативный метод через requirements.txt..."
+    if pip install -r requirements.txt --no-cache-dir; then
+        echo "✅ Зависимости установлены через requirements.txt"
+    else
+        echo "⚠️  Проблемы с установкой некоторых пакетов, но продолжаем..."
+    fi
+fi
 
 # Проверка и установка Ollama
 echo "🤖 Проверка Ollama..."
@@ -496,23 +598,33 @@ python -c "import pynput" 2>/dev/null && echo "   ✅ pynput" || echo "   ⚠️
 
 # Установка недостающих критичных зависимостей
 if [ ! -z "$MISSING_DEPS" ]; then
-    echo "📦 Установка недостающих зависимостей..."
+    echo "📦 Доустановка недостающих зависимостей..."
     for dep in $MISSING_DEPS; do
         case $dep in
             "telegram")
-                pip install python-telegram-bot==20.7 || echo "❌ Не удалось установить python-telegram-bot"
+                pip install python-telegram-bot>=20.0,<21.0 --no-cache-dir || \
+                pip install python-telegram-bot --no-cache-dir || \
+                echo "❌ Не удалось установить python-telegram-bot"
                 ;;
             "PIL")
-                pip install Pillow==10.1.0 || echo "❌ Не удалось установить Pillow"
+                pip install Pillow>=9.0.0 --no-cache-dir || \
+                pip install Pillow --no-cache-dir || \
+                echo "❌ Не удалось установить Pillow"
                 ;;
             "aiohttp")
-                pip install aiohttp==3.9.1 || echo "❌ Не удалось установить aiohttp"
+                pip install aiohttp>=3.8.0 --no-cache-dir || \
+                pip install aiohttp --no-cache-dir || \
+                echo "❌ Не удалось установить aiohttp"
                 ;;
             "yaml")
-                pip install pyyaml==6.0.1 || echo "❌ Не удалось установить pyyaml"
+                pip install pyyaml>=6.0 --no-cache-dir || \
+                pip install pyyaml --no-cache-dir || \
+                echo "❌ Не удалось установить pyyaml"
                 ;;
             "loguru")
-                pip install loguru==0.7.2 || echo "❌ Не удалось установить loguru"
+                pip install loguru>=0.7.0 --no-cache-dir || \
+                pip install loguru --no-cache-dir || \
+                echo "❌ Не удалось установить loguru"
                 ;;
         esac
     done
