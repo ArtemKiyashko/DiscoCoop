@@ -9,6 +9,7 @@ set -e  # Остановка при ошибках
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="$HOME/disco-coop"
 PYTHON_DIR="$HOME/python"
+OLLAMA_DIR="$HOME/.local/share/ollama"
 LOCAL_BIN="$HOME/.local/bin"
 
 # Функции логирования
@@ -21,7 +22,23 @@ log_success() {
 }
 
 log_warning() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️  $1" >&2
+    echo "[$(date '+%Y-%m-%d %H:    --clean)
+        log_info "🗑️  Очистка установки..."
+        rm -rf "$PYTHON_DIR" "$OLLAMA_DIR" "$LOCAL_BIN"
+        rm -f test_setup.py
+        systemctl --user stop ollama disco-coop-bot 2>/dev/null || true
+        systemctl --user disable ollama disco-coop-bot 2>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/ollama.service"
+        rm -f "$HOME/.config/systemd/user/disco-coop-bot.service"
+        systemctl --user daemon-reload
+        log_success "Очистка завершена"
+        exit 0
+        ;;
+    --reinstall)
+        log_info "🔄 Переустановка..."
+        main
+        exit $?
+        ;;&2
 }
 
 log_error() {
@@ -518,25 +535,11 @@ main() {
     # Выполняем установку по этапам
     log_info "🚀 Начинаем установку..."
     
-    if ! check_installation; then
-        log_info "Выполняем полную установку..."
-        
-        install_python
-        create_image_tools  
-        install_ollama
-        install_project
-        setup_services
-        
-        # Помечаем как установленную
-        touch "$INSTALL_MARKER"
-        echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$INSTALL_MARKER"
-    else
-        log_info "Система уже установлена. Обновляем компоненты..."
-        
-        # При повторном запуске только обновляем проект
-        install_project
-        setup_services
-    fi
+    install_python
+    create_image_tools  
+    install_ollama
+    install_project
+    setup_services
     
     # Финальная проверка
     final_check

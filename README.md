@@ -46,10 +46,11 @@
 
 ## 🚀 Быстрая установка на Steam Deck
 
-### 1. Автоматическая установка (рекомендуется)
+### Автоматическая установка (рекомендуется)
+
+Переключитесь в Desktop Mode на Steam Deck и откройте Konsole
 
 ```bash
-# Переключитесь в Desktop Mode на Steam Deck и откройте Konsole
 curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh" | bash
 ```
 
@@ -59,71 +60,6 @@ curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/insta
 - ✅ Создает все необходимые конфигурации
 - ✅ Настраивает systemd сервисы
 - ✅ Устанавливает альтернативы для скриншотов
-
-### 2. Ручная настройка (если нужно)
-
-#### Подготовка Steam Deck
-
-1. **Включите режим разработчика:**
-   - Перейдите в Desktop Mode
-   - Установите пароль: `passwd`
-
-2. **Настройка Telegram бота:**
-   - Создайте бота через @BotFather
-   - Получите токен бота
-   - Добавьте бота в групповой чат
-   - Получите ID чата через API
-
-3. **Запуск:**
-   ```bash
-   # Перезапуск установки (идемпотентный)
-   ./install.sh
-   
-   # Проверка статуса
-   sudo systemctl status disco-coop
-   sudo systemctl status ollama
-   ```
-
-## Требования
-- Steam Deck с SteamOS (основная платформа)
-- Python 3.8+
-- Disco Elysium (любая версия)
-- Telegram Bot Token
-
-### Быстрая установка на Steam Deck
-
-```bash
-# Одна команда для полной установки
-curl -fsSL "https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh" | bash
-
-# Настройте config.yaml
-nano ~/disco_coop/config/config.yaml
-
-# Запустите бота
-cd ~/disco_coop && ./start.sh
-```
-
-### Ручная установка
-
-1. **Клонирование репозитория:**
-   ```bash
-   git clone https://github.com/ArtemKiyashko/DiscoCoop.git
-   cd DiscoCoop
-   ```
-
-2. **Установка зависимостей:**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # Linux/Mac
-   pip install -r requirements.txt
-   ```
-
-3. **Установка Ollama:**
-   ```bash
-   curl -fsSL https://ollama.ai/install.sh | sh
-   ollama pull llama3.1:8b
-   ollama pull llava:7b
-   ```
 
 ### Конфигурация
 
