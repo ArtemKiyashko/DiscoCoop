@@ -1,6 +1,56 @@
 #!/bin/bash
 
-# Скрипт быстрой установки Disco Coop на Steam Deck
+# Скрипт быстрой установки Disc    echo "🔓 Разблокировка файловой     # Обновляем базу данных пакетов с retry логикой
+    echo "📥 Обновление базы данных пакетов..."
+    for i in {1..3}; do
+        if sudo pacman -Sy --noconfirm; then
+            echo "✅ База данных пакетов обновлена"
+            break
+        else
+            echo "   Попытка $i/3 обновления базы данных..."
+            if [ $i -eq 3 ]; then
+                echo "❌ Не удалось обновить базу данных пакетов"
+                PACMAN_FAILED=true
+                break
+            fi
+            sleep 3
+        fi
+    done
+    
+    if [ "$PACMAN_FAILED" = false ]; then
+        echo "📦 Установка пакетов..."
+        
+        # Сначала очищаем поврежденные пакеты автоматически
+        echo "🧹 Очистка поврежденного кэша пакетов..."
+        sudo find /var/cache/pacman/pkg/ -name "*.pkg.tar.zst" -type f -delete 2>/dev/null || true
+        
+        # Полная очистка кэша
+        printf "y\ny\n" | sudo pacman -Scc 2>/dev/null || true
+    fiam Deck..."
+    sudo steamos-readonly disable 2>/dev/null || true
+    
+    # Исправляем права доступа к keyring
+    echo "🔧 Исправление прав доступа к keyring..."
+    sudo chown -R root:root /etc/pacman.d/gnupg/ 2>/dev/null || true
+    sudo chmod -R 755 /etc/pacman.d/gnupg/ 2>/dev/null || true
+    
+    # Очищаем и пересоздаем keyring
+    echo "🔑 Настройка keyring для SteamOS..."
+    sudo rm -rf /etc/pacman.d/gnupg 2>/dev/null || true
+    sudo pacman-key --init
+    sudo pacman-key --populate archlinux
+    
+    # Добавляем ключи SteamOS с retry логикой
+    echo "🔐 Добавление ключей SteamOS..."
+    for i in {1..3}; do
+        if sudo pacman-key --recv-keys 3056513887B78AEB 2>/dev/null; then
+            sudo pacman-key --lsign-key 3056513887B78AEB 2>/dev/null || true
+            break
+        else
+            echo "   Попытка $i/3 получения ключей..."
+            sleep 2
+        fi
+    doneteam Deck
 
 set -e  # Остановка при ошибке
 
@@ -70,7 +120,7 @@ if command -v pacman &> /dev/null; then
     echo "📥 Попытка установки Python и базовых пакетов..."
     
     # Используем timeout и yes для автоматических ответов
-    if timeout 300 bash -c 'yes "y" | sudo pacman -S --needed python python-pip git 2>/dev/null'; then
+    if [ "$PACMAN_FAILED" = false ] && timeout 300 bash -c 'yes "y" | sudo pacman -S --needed python python-pip git 2>/dev/null'; then
         echo "✅ Базовые пакеты установлены"
         
         # Пробуем установить дополнительные пакеты
@@ -89,8 +139,19 @@ if command -v pacman &> /dev/null; then
             echo "⚠️  Дополнительные пакеты не установлены, но это не критично"
         }
     else
-        echo "❌ Не удается установить через pacman, используем альтернативный метод..."
-        PACMAN_FAILED=true
+        echo "❌ Не удается установить через pacman"
+        
+        # Проверяем, не связано ли это с keyring
+        if pacman -Sy 2>&1 | grep -i "keyring\|key\|signature"; then
+            echo "🔐 Обнаружена проблема с keyring!"
+            echo "💡 Запустите: ./fix_screenshots.sh"
+            echo "   Скрипт исправит keyring и установит пакеты для скриншотов"
+            echo "   Затем перезапустите установку"
+            exit 1
+        else
+            echo "   Используем альтернативный метод..."
+            PACMAN_FAILED=true
+        fi
     fi
     
     echo "🔒 Возвращение файловой системы в read-only режим..."

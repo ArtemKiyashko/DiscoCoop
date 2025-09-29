@@ -199,6 +199,22 @@ cd ~/disco_coop
 - ❌ Неправильные пути в сервисе
 - ❌ Проблемы с конфигурацией
 
+#### Проблемы с keyring и скриншотами
+
+Если при установке появляются ошибки `keyring is not writable`, `required key missing from keyring`, или не работают скриншоты (`convert: command not found`, `xwd: command not found`):
+
+```bash
+cd ~/disco_coop
+./fix_screenshots.sh
+```
+
+**Скрипт исправляет:**
+- ❌ Испорченный keyring pacman
+- ❌ Отсутствующие PGP ключи SteamOS
+- ❌ Неправильные права доступа к keyring
+- ❌ Проблемы с подписями пакетов
+- ❌ Отсутствующие команды convert, xwd, xdotool
+
 #### Проблемы со скриншотами
 
 Если команда `/describe` выдает ошибки `convert: command not found` или `xwd: command not found`:

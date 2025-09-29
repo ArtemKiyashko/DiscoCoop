@@ -1,11 +1,18 @@
 #!/bin/bash
 
-# Скрипт для исправления проблем со скриншотами на Steam Deck
+# Комплексный скрипт для исправления проблем со скриншотами на Steam Deck
+# Включает исправление keyring и установку всех необходимых пакетов
 
 set -e
 
-echo "🖼️  Исправление системы скриншотов"
-echo "================================="
+echo "🖼️  Комплексное исправление скриншотов"
+echo "======================================"
+
+# Проверяем, что мы на Steam Deck
+if [ -f "/etc/steamos-release" ] && [ "$XDG_CURRENT_DESKTOP" != "KDE" ]; then
+    echo "⚠️  Пожалуйста, переключитесь в Desktop Mode для выполнения этого скрипта"
+    exit 1
+fi
 
 # Проверяем наличие необходимых команд
 echo "🔍 Проверка необходимых команд..."
@@ -36,6 +43,72 @@ else
     echo "✅ xdotool найден"
 fi
 
+# Функция для исправления keyring
+fix_keyring() {
+    echo "🔧 Исправление keyring..."
+    
+    echo "🛑 Остановка сервисов..."
+    sudo systemctl stop pacman-init.service 2>/dev/null || true
+    
+    echo "🧹 Очистка поврежденного keyring..."
+    sudo rm -rf /etc/pacman.d/gnupg
+    sudo rm -rf /var/lib/pacman/sync/*
+    
+    echo "🔧 Исправление прав доступа..."
+    sudo mkdir -p /etc/pacman.d/gnupg
+    sudo chown -R root:root /etc/pacman.d/gnupg/
+    sudo chmod -R 755 /etc/pacman.d/gnupg/
+    
+    echo "🔑 Инициализация нового keyring..."
+    sudo pacman-key --init
+    
+    echo "📦 Заполнение ключами Arch Linux..."
+    sudo pacman-key --populate archlinux
+    
+    echo "🔐 Добавление ключей SteamOS..."
+    # Пробуем несколько серверов ключей
+    KEY_SERVERS=(
+        "hkps://keys.openpgp.org"
+        "hkps://keyserver.ubuntu.com"
+        "hkps://pgp.mit.edu"
+    )
+    
+    STEAMOS_KEY="3056513887B78AEB"
+    
+    for server in "${KEY_SERVERS[@]}"; do
+        echo "   Пробуем сервер: $server"
+        if sudo pacman-key --keyserver "$server" --recv-keys "$STEAMOS_KEY" 2>/dev/null; then
+            echo "   ✅ Ключ получен с $server"
+            sudo pacman-key --lsign-key "$STEAMOS_KEY"
+            break
+        else
+            echo "   ❌ Не удалось получить ключ с $server"
+        fi
+    done
+    
+    # Дополнительные ключи для Steam Deck
+    echo "🔐 Добавление дополнительных ключей..."
+    ADDITIONAL_KEYS=(
+        "991F6E3F0765CF6295888586139B09DA5BF0D338"  # SteamOS signing key
+        "AB19265E5D7D20687D303246BA1DFB64FFF979E7"  # SteamOS package signing
+    )
+    
+    for key in "${ADDITIONAL_KEYS[@]}"; do
+        for server in "${KEY_SERVERS[@]}"; do
+            if sudo pacman-key --keyserver "$server" --recv-keys "$key" 2>/dev/null; then
+                sudo pacman-key --lsign-key "$key" 2>/dev/null || true
+                echo "   ✅ Ключ $key добавлен"
+                break
+            fi
+        done
+    done
+    
+    echo "🔄 Обновление доверия к ключам..."
+    sudo pacman-key --updatedb
+    
+    echo "✅ Keyring исправлен"
+}
+
 # Устанавливаем недостающие пакеты
 if [ ! -z "$MISSING_COMMANDS" ]; then
     echo ""
@@ -45,9 +118,25 @@ if [ ! -z "$MISSING_COMMANDS" ]; then
     echo "🔓 Разблокировка файловой системы Steam Deck..."
     sudo steamos-readonly disable 2>/dev/null || true
     
-    # Обновляем базу пакетов
-    echo "📥 Обновление базы пакетов..."
-    sudo pacman -Sy --noconfirm 2>/dev/null || true
+    # Проверяем и исправляем keyring при необходимости
+    echo "📥 Проверка базы пакетов..."
+    if ! sudo pacman -Sy --noconfirm 2>/dev/null; then
+        echo "❌ Проблема с базой данных пакетов, возможно keyring поврежден"
+        
+        # Проверяем специфические ошибки keyring
+        if sudo pacman -Sy 2>&1 | grep -i "keyring\|key\|signature"; then
+            echo "🔐 Обнаружена проблема с keyring, исправляем..."
+            fix_keyring
+            
+            # Пробуем еще раз после исправления keyring
+            echo "📥 Повторная попытка обновления базы данных..."
+            sudo pacman -Sy --noconfirm
+        else
+            echo "⚠️  Другая проблема с pacman, продолжаем..."
+        fi
+    else
+        echo "✅ База данных пакетов в порядке"
+    fi
     
     # Устанавливаем пакеты
     echo "📦 Установка пакетов..."
