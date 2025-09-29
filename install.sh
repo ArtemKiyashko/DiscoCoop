@@ -1,84 +1,56 @@
 #!/bin/bash
 
-# Скрипт быстрой установки Disc    echo "🔓 Разблокировка файловой     # Обновляем базу данных пакетов с retry логикой
-    echo "📥 Обновление базы данных п    echo "🔓 Разблокировка файловой системы Steam Deck..."
-    sudo steamos-readonly disable 2>/dev/null || true
-    
-    # Сначала пробуем обычное обновление
-    echo "📥 Проверка базы пакетов..."
-    if ! sudo pacman -Sy --noconfirm 2>/dev/null; then
-        echo "❌ Проблема с базой данных пакетов"
-        
-        # Проверяем, связано ли это с keyring
-        if sudo pacman -Sy 2>&1 | grep -i "keyring\|key.*missing\|signature"; then
-            echo "🔐 Обнаружена проблема с keyring, исправляем..."
-            fix_keyring
-            
-            # Пробуем еще раз после исправления keyring
-            echo "📥 Повторная попытка обновления базы данных..."
-            if ! sudo pacman -Sy --noconfirm; then
-                echo "❌ Не удалось обновить базу данных даже после исправления keyring"
-                PACMAN_FAILED=true
-            else
-                echo "✅ База данных пакетов обновлена после исправления keyring"
-            fi
-        else
-            echo "⚠️  Другая проблема с pacman"
-            PACMAN_FAILED=true
-        fi
-    else
-        echo "✅ База данных пакетов в порядке"
-    fi for i in {1..3}; do
-        if sudo pacman -Sy --noconfirm; then
-            echo "✅ База данных пакетов обновлена"
-            break
-        else
-            echo "   Попытка $i/3 обновления базы данных..."
-            if [ $i -eq 3 ]; then
-                echo "❌ Не удалось обновить базу данных пакетов"
-                PACMAN_FAILED=true
-                break
-            fi
-            sleep 3
-        fi
-    done
-    
-    if [ "$PACMAN_FAILED" = false ]; then
-        echo "📦 Установка пакетов..."
-        
-        # Сначала очищаем поврежденные пакеты автоматически
-        echo "🧹 Очистка поврежденного кэша пакетов..."
-        sudo find /var/cache/pacman/pkg/ -name "*.pkg.tar.zst" -type f -delete 2>/dev/null || true
-        
-        # Полная очистка кэша
-        printf "y\ny\n" | sudo pacman -Scc 2>/dev/null || true
-    fiam Deck..."
-    sudo steamos-readonly disable 2>/dev/null || true
-    
-    # Исправляем права доступа к keyring
-    echo "🔧 Исправление прав доступа к keyring..."
-    sudo chown -R root:root /etc/pacman.d/gnupg/ 2>/dev/null || true
-    sudo chmod -R 755 /etc/pacman.d/gnupg/ 2>/dev/null || true
-    
-    # Очищаем и пересоздаем keyring
-    echo "🔑 Настройка keyring для SteamOS..."
-    sudo rm -rf /etc/pacman.d/gnupg 2>/dev/null || true
-    sudo pacman-key --init
-    sudo pacman-key --populate archlinux
-    
-    # Добавляем ключи SteamOS с retry логикой
-    echo "🔐 Добавление ключей SteamOS..."
-    for i in {1..3}; do
-        if sudo pacman-key --recv-keys 3056513887B78AEB 2>/dev/null; then
-            sudo pacman-key --lsign-key 3056513887B78AEB 2>/dev/null || true
-            break
-        else
-            echo "   Попытка $i/3 получения ключей..."
-            sleep 2
-        fi
-    doneteam Deck
+# Disco Coop - Установочный скрипт для Steam Deck
 
-set -e  # Остановка при ошибке
+# Функция логирования с временными метками
+log_info() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+}
+
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ ОШИБКА: $1" >&2
+}
+
+log_warning() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️  ПРЕДУПРЕЖДЕНИЕ: $1" >&2
+}
+
+# Функция для исправления keyring
+fix_keyring() {
+    log_info "🔑 Проверка состояния keyring..."
+    
+    # Проверяем, инициализирован ли keyring
+    if ! pacman-key --list-keys | grep -q "pacman@localhost"; then
+        log_warning "Keyring не инициализирован. Исправляем..."
+        
+        # Удаляем поврежденный keyring
+        sudo rm -rf /etc/pacman.d/gnupg 2>/dev/null || true
+        
+        # Инициализируем keyring
+        log_info "Инициализация keyring..."
+        sudo pacman-key --init || {
+            log_error "Не удалось инициализировать keyring"
+            return 1
+        }
+        
+        # Популяция ключей
+        log_info "Популяция ключей Arch Linux..."
+        sudo pacman-key --populate archlinux || {
+            log_error "Не удалось популировать ключи"
+            return 1
+        }
+        
+        # Обновление ключей
+        log_info "Обновление ключей с серверов..."
+        timeout 300 sudo pacman-key --refresh-keys 2>/dev/null || {
+            log_warning "Не удалось обновить все ключи (таймаут), но это не критично"
+        }
+        
+        log_info "✅ Keyring восстановлен"
+    else
+        log_info "✅ Keyring в порядке"
+    fi
+}
 
 # URL репозитория
 REPOSITORY_URL="https://github.com/ArtemKiyashko/DiscoCoop.git"
@@ -86,84 +58,9 @@ REPOSITORY_URL="https://github.com/ArtemKiyashko/DiscoCoop.git"
 # Переменные состояния
 PACMAN_FAILED=false
 
-# Функция для исправления keyring
-fix_keyring() {
-    echo ""
-    echo "🔧 ==============================="
-    echo "🔧 Исправление keyring pacman"
-    echo "🔧 ==============================="
-    echo ""
-    
-    echo "🛑 Остановка сервисов..."
-    sudo systemctl stop pacman-init.service 2>/dev/null || true
-    
-    echo "🧹 Очистка поврежденного keyring..."
-    sudo rm -rf /etc/pacman.d/gnupg
-    sudo rm -rf /var/lib/pacman/sync/*
-    sudo rm -rf /var/cache/pacman/pkg/*
-    
-    echo "🔧 Исправление прав доступа..."
-    sudo mkdir -p /etc/pacman.d/gnupg
-    sudo chown -R root:root /etc/pacman.d/gnupg/
-    sudo chmod -R 755 /etc/pacman.d/gnupg/
-    
-    echo "🔑 Инициализация нового keyring..."
-    sudo pacman-key --init
-    
-    echo "📦 Заполнение ключами Arch Linux..."
-    sudo pacman-key --populate archlinux
-    
-    echo "🔐 Добавление ключей SteamOS..."
-    # Пробуем несколько серверов ключей
-    KEY_SERVERS=(
-        "hkps://keys.openpgp.org"
-        "hkps://keyserver.ubuntu.com"
-        "hkps://pgp.mit.edu"
-    )
-    
-    STEAMOS_KEY="3056513887B78AEB"
-    
-    for server in "${KEY_SERVERS[@]}"; do
-        echo "   Пробуем сервер: $server"
-        if sudo pacman-key --keyserver "$server" --recv-keys "$STEAMOS_KEY" 2>/dev/null; then
-            echo "   ✅ Ключ получен с $server"
-            sudo pacman-key --lsign-key "$STEAMOS_KEY"
-            break
-        else
-            echo "   ❌ Не удалось получить ключ с $server"
-        fi
-    done
-    
-    # Дополнительные ключи для Steam Deck
-    echo "🔐 Добавление дополнительных ключей..."
-    ADDITIONAL_KEYS=(
-        "991F6E3F0765CF6295888586139B09DA5BF0D338"  # SteamOS signing key
-        "AB19265E5D7D20687D303246BA1DFB64FFF979E7"  # SteamOS package signing
-    )
-    
-    for key in "${ADDITIONAL_KEYS[@]}"; do
-        for server in "${KEY_SERVERS[@]}"; do
-            if sudo pacman-key --keyserver "$server" --recv-keys "$key" 2>/dev/null; then
-                sudo pacman-key --lsign-key "$key" 2>/dev/null || true
-                echo "   ✅ Ключ $key добавлен"
-                break
-            fi
-        done
-    done
-    
-    echo "🔄 Обновление доверия к ключам..."
-    sudo pacman-key --updatedb
-    
-    echo ""
-    echo "✅ ==============================="
-    echo "✅ Keyring успешно исправлен!"
-    echo "✅ ==============================="
-    echo ""
-}
-
-echo "🎮 Disco Coop - Установка на Steam Deck"
-echo "========================================"
-echo "📅 Версия скрипта: $(date '+%Y-%m-%d %H:%M:%S')"
+log_info "🎮 Disco Coop - Установка на Steam Deck"
+log_info "========================================"
+log_info "📅 Версия скрипта: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "🔗 Репозиторий: $REPOSITORY_URL"
 echo ""
 
@@ -175,30 +72,16 @@ fi
 
 # Создание директории проекта
 PROJECT_DIR="$HOME/disco_coop"
-echo "📁 Работа с директорией проекта в $PROJECT_DIR"
+echo "📁 Создание директории проекта в $PROJECT_DIR"
 
 if [ -d "$PROJECT_DIR" ]; then
-    echo "✅ Директория уже существует. Обновляем репозиторий..."
+    echo "⚠️  Директория уже существует. Обновляем..."
     cd "$PROJECT_DIR"
-    
-    # Проверяем, что это git репозиторий
-    if [ -d ".git" ]; then
-        # Сохраняем локальные изменения
-        git stash push -m "Auto-stash before update $(date)" 2>/dev/null || true
-        git pull --rebase origin main 2>/dev/null || git pull origin main || echo "⚠️  Не удалось обновить репозиторий, продолжаем с текущей версией"
-        git stash pop 2>/dev/null || true
-    else
-        echo "⚠️  Директория существует, но не является git репозиторием"
-        echo "   Продолжаем работу с существующими файлами"
-    fi
+    git pull
 else
     echo "📥 Клонирование репозитория..."
     cd "$HOME"
-    if ! git clone "$REPOSITORY_URL" disco_coop; then
-        echo "❌ Не удалось клонировать репозиторий"
-        echo "💡 Проверьте подключение к интернету и попробуйте еще раз"
-        exit 1
-    fi
+    git clone "$REPOSITORY_URL" disco_coop
     cd disco_coop
 fi
 
@@ -211,8 +94,9 @@ if command -v pacman &> /dev/null; then
     sudo steamos-readonly disable 2>/dev/null || true
     
     echo "🔑 Настройка keyring для SteamOS..."
-    sudo pacman-key --init 2>/dev/null || true
-    sudo pacman-key --populate archlinux 2>/dev/null || true
+    fix_keyring || {
+        log_warning "Не удалось полностью исправить keyring, но продолжаем..."
+    }
     
     # Добавляем ключи SteamOS
     echo "� Добавление ключей SteamOS..."
@@ -235,86 +119,17 @@ if command -v pacman &> /dev/null; then
     echo "📥 Попытка установки Python и базовых пакетов..."
     
     # Используем timeout и yes для автоматических ответов
-    if [ "$PACMAN_FAILED" = false ]; then
-        echo "📥 Установка базовых пакетов (Python, pip, git)..."
-        
-        # Захватываем вывод для анализа keyring ошибок  
-        BASIC_OUTPUT=$(timeout 300 bash -c 'yes "y" | sudo pacman -S --needed python python-pip git' 2>&1)
-        BASIC_EXIT_CODE=$?
-        
-        if [ $BASIC_EXIT_CODE -eq 0 ]; then
-            echo "✅ Базовые пакеты установлены"
-        else
-            # Проверяем, связана ли ошибка с keyring
-            if echo "$BASIC_OUTPUT" | grep -i "keyring\|key.*missing\|signature"; then
-                echo "🔐 Обнаружена проблема с keyring при установке базовых пакетов"
-                fix_keyring
-                
-                # Пробуем установить пакеты еще раз
-                echo "📥 Повторная попытка установки базовых пакетов..."
-                if timeout 300 bash -c 'yes "y" | sudo pacman -S --needed python python-pip git'; then
-                    echo "✅ Базовые пакеты установлены после исправления keyring"
-                else
-                    echo "❌ Не удалось установить базовые пакеты даже после исправления keyring"
-                    PACMAN_FAILED=true
-                fi
-            else
-                echo "❌ Не удалось установить базовые пакеты по другой причине"
-                PACMAN_FAILED=true
-            fi
-        fi
-    fi
-    
-    if [ "$PACMAN_FAILED" = false ]; then
+    if timeout 300 bash -c 'yes "y" | sudo pacman -S --needed python python-pip git 2>/dev/null'; then
+        echo "✅ Базовые пакеты установлены"
         
         # Пробуем установить дополнительные пакеты
         echo "📦 Установка дополнительных пакетов..."
-        
-        # Критичные пакеты для скриншотов
-        echo "🖼️  Установка пакетов для скриншотов..."
-        
-        # Захватываем вывод для анализа keyring ошибок
-        SCREENSHOT_OUTPUT=$(timeout 180 bash -c 'yes "y" | sudo pacman -S --needed imagemagick xorg-xwd' 2>&1)
-        SCREENSHOT_EXIT_CODE=$?
-        
-        if [ $SCREENSHOT_EXIT_CODE -eq 0 ]; then
-            echo "✅ Пакеты для скриншотов установлены"
-        else
-            # Проверяем, связана ли ошибка с keyring
-            if echo "$SCREENSHOT_OUTPUT" | grep -i "keyring\|key.*missing\|signature"; then
-                echo "🔐 Обнаружена проблема с keyring при установке пакетов для скриншотов"
-                fix_keyring
-                
-                # Пробуем установить пакеты еще раз
-                echo "🖼️  Повторная попытка установки пакетов для скриншотов..."
-                if timeout 180 bash -c 'yes "y" | sudo pacman -S --needed imagemagick xorg-xwd'; then
-                    echo "✅ Пакеты для скриншотов установлены после исправления keyring"
-                else
-                    echo "⚠️  Пакеты для скриншотов не установлены даже после исправления keyring"
-                fi
-            else
-                echo "⚠️  Пакеты для скриншотов не установлены - требуется ручная установка"
-            fi
-        fi
-        
-        # Дополнительные пакеты
-        timeout 180 bash -c 'yes "y" | sudo pacman -S --needed tk xdotool 2>/dev/null' || {
+        timeout 180 bash -c 'yes "y" | sudo pacman -S --needed tk xdotool imagemagick 2>/dev/null' || {
             echo "⚠️  Дополнительные пакеты не установлены, но это не критично"
         }
     else
-        echo "❌ Не удается установить через pacman"
-        
-        # Проверяем, не связано ли это с keyring
-        if pacman -Sy 2>&1 | grep -i "keyring\|key\|signature"; then
-            echo "🔐 Обнаружена проблема с keyring!"
-            echo "💡 Запустите: ./fix_screenshots.sh"
-            echo "   Скрипт исправит keyring и установит пакеты для скриншотов"
-            echo "   Затем перезапустите установку"
-            exit 1
-        else
-            echo "   Используем альтернативный метод..."
-            PACMAN_FAILED=true
-        fi
+        echo "❌ Не удается установить через pacman, используем альтернативный метод..."
+        PACMAN_FAILED=true
     fi
     
     echo "🔒 Возвращение файловой системы в read-only режим..."
@@ -355,7 +170,7 @@ fi
 
 
 # Создание виртуального окружения (обязательно для Steam Deck)
-echo "🐍 Настройка виртуального окружения..."
+echo "🐍 Создание виртуального окружения..."
 
 # Определяем какой Python использовать
 if command -v python3 &> /dev/null; then
@@ -372,35 +187,13 @@ fi
 
 echo "🔧 Используем: $PYTHON_CMD"
 
-# Проверяем существующее виртуальное окружение
-if [ -d "venv" ]; then
-    echo "✅ Виртуальное окружение уже существует"
-    
-    # Проверяем, что оно работает
-    if [ -f "venv/bin/activate" ] && [ -f "venv/bin/python" ]; then
-        echo "✅ Виртуальное окружение корректно настроено"
-        source venv/bin/activate
-        
-        # Проверяем версию Python в venv
-        VENV_PYTHON_VERSION=$(python --version 2>&1)
-        echo "🐍 Версия Python в venv: $VENV_PYTHON_VERSION"
-    else
-        echo "⚠️  Виртуальное окружение повреждено, пересоздаем..."
-        rm -rf venv
-        if ! $PYTHON_CMD -m venv venv; then
-            echo "❌ Не удалось создать виртуальное окружение"
-            exit 1
-        fi
-        source venv/bin/activate
-    fi
-else
-    echo "📦 Создание нового виртуального окружения..."
-    if ! $PYTHON_CMD -m venv venv; then
-        echo "❌ Не удалось создать виртуальное окружение"
-        exit 1
-    fi
-    source venv/bin/activate
+# Создаем виртуальное окружение
+if ! $PYTHON_CMD -m venv venv; then
+    echo "❌ Не удалось создать виртуальное окружение"
+    exit 1
 fi
+
+source venv/bin/activate
 
 # Обновляем pip и устанавливаем инструменты сборки
 echo "📚 Обновление pip и установка инструментов сборки..."
@@ -713,27 +506,13 @@ check_model "llava:7b" || echo "⚠️  Модель llava:7b не загруж�
 # Создание конфигурации
 echo "⚙️  Настройка конфигурации..."
 if [ ! -f "config/config.yaml" ]; then
-    if [ -f "config/config.example.yaml" ]; then
-        cp config/config.example.yaml config/config.yaml
-        echo "📝 Создан файл конфигурации config/config.yaml"
-        echo "❗ ВАЖНО: Отредактируйте config/config.yaml с вашими настройками!"
-    else
-        echo "⚠️  Файл config.example.yaml не найден, пропускаем создание конфигурации"
-        echo "💡 Вы можете создать config/config.yaml вручную позже"
-    fi
-else
-    echo "✅ Файл конфигурации уже существует"
-    echo "💡 Проверьте, что настройки актуальны в config/config.yaml"
+    cp config/config.example.yaml config/config.yaml
+    echo "📝 Создан файл конфигурации config/config.yaml"
+    echo "❗ ВАЖНО: Отредактируйте config/config.yaml с вашими настройками!"
 fi
 
 # Создание systemd сервиса для Disco Coop
-echo "🔧 Настройка systemd сервиса Disco Coop..."
-if [ -f "/etc/systemd/system/disco-coop.service" ]; then
-    echo "✅ Сервис disco-coop.service уже существует, обновляем..."
-else
-    echo "📝 Создание нового сервиса disco-coop.service..."
-fi
-
+echo "🔧 Создание systemd сервиса Disco Coop..."
 sudo tee /etc/systemd/system/disco-coop.service > /dev/null << EOF
 [Unit]
 Description=Disco Coop Telegram Bot
@@ -764,10 +543,7 @@ echo "✅ Сервисы настроены для автоматическог�
 mkdir -p logs
 
 # Создание скрипта запуска
-echo "📜 Создание/обновление скриптов управления..."
-
-# Создаем или обновляем start.sh
-echo "   📄 start.sh"
+echo "📜 Создание скрипта запуска..."
 cat > start.sh << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
@@ -844,7 +620,6 @@ chmod +x status.sh
 # Финальная проверка системы
 echo ""
 echo "🔍 Финальная проверка системы..."
-echo "================================"
 
 # Активируем виртуальное окружение для проверок
 source venv/bin/activate
@@ -1076,9 +851,6 @@ echo ""
 echo "❗ Важно:"
 echo "- Создайте Telegram бота через @BotFather"
 echo "- Запустите Disco Elysium перед использованием"
-echo "- Скрипт можно запускать многократно для обновлений и исправлений"
-echo ""
-echo "🔄 При проблемах:"
-echo "- Keyring/пакеты: ./fix_screenshots.sh"
-echo "- Переустановка: curl -fsSL https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh | bash"
-echo "- Повторный запуск: ./install.sh (безопасно для существующей установки)"
+echo "- При проблемах запустите скрипт повторно"
+
+log_info "✅ Установка завершена успешно!"
