@@ -29,6 +29,46 @@ log_error() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ $1" >&2
 }
 
+# Скачивание шаблонов для удаленной установки
+download_templates() {
+    log_info "📥 Скачивание шаблонов..."
+    
+    local base_url="https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/templates"
+    local templates=(
+        "ollama.service"
+        "disco-coop-bot.service" 
+        "ollama-config.json"
+        "xwd-wrapper.sh"
+        "convert-wrapper.sh"
+        "import-wrapper.sh"
+        "test_setup.py"
+    )
+    
+    mkdir -p templates
+    
+    for template in "${templates[@]}"; do
+        if curl -fsSL "$base_url/$template" -o "templates/$template"; then
+            log_info "✅ Скачан: $template"
+        else
+            log_warning "⚠️  Не удалось скачать: $template"
+        fi
+    done
+    
+    # Делаем скрипты исполняемыми
+    chmod +x templates/*.sh templates/test_setup.py 2>/dev/null || true
+    
+    log_success "Шаблоны скачаны"
+}
+
+# Очистка временных шаблонов
+cleanup_templates() {
+    if [ "$SCRIPT_DIR" != "$(pwd)" ]; then
+        # Удаляем только если мы не в исходной директории проекта
+        rm -rf templates
+        log_info "Временные шаблоны удалены"
+    fi
+}
+
 # Проверка идемпотентности - можно запускать многократно
 check_installation() {
     local component="$1"
@@ -334,6 +374,11 @@ main() {
     # Добавляем в PATH
     export PATH="$PYTHON_DIR/bin:$OLLAMA_DIR/bin:$LOCAL_BIN:$PATH"
     
+    # Скачиваем шаблоны если их нет
+    if [ ! -d "templates" ]; then
+        download_templates
+    fi
+    
     # Выполняем установку по этапам
     log_info "🚀 Начинаем установку..."
     
@@ -345,6 +390,9 @@ main() {
     
     # Финальная проверка
     final_check
+    
+    # Очищаем временные шаблоны
+    cleanup_templates
     
     echo
     log_success "✨ Готово! Теперь настройте config/config.yaml и запустите сервисы."
@@ -374,7 +422,8 @@ case "${1:-}" in
     --clean)
         log_info "🗑️  Очистка установки..."
         rm -rf "$PYTHON_DIR" "$OLLAMA_DIR" "$LOCAL_BIN"
-        rm -f "$INSTALL_MARKER" test_setup.py
+        rm -f test_setup.py
+        rm -rf templates  # Удаляем временные шаблоны
         systemctl --user stop ollama disco-coop-bot 2>/dev/null || true
         systemctl --user disable ollama disco-coop-bot 2>/dev/null || true
         rm -f "$HOME/.config/systemd/user/ollama.service"
@@ -385,7 +434,6 @@ case "${1:-}" in
         ;;
     --reinstall)
         log_info "� Переустановка..."
-        rm -f "$INSTALL_MARKER"
         main
         exit $?
         ;;
