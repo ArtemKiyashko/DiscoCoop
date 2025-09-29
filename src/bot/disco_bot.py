@@ -48,11 +48,16 @@ class DiscoCoopBot:
     
     def _setup_handlers(self):
         """Настройка обработчиков команд и сообщений"""
-        # Команда /start
+        # Команда /start (в том числе /start@botname)
         self.application.add_handler(CommandHandler("start", self.start_command))
         
-        # Команда /game для игровых действий (работает в группах)
+        # Команда /game для игровых действий (в том числе /game@botname)
         self.application.add_handler(CommandHandler("game", self.game_command))
+        
+        # Команда /describe для описания экрана (в том числе /describe@botname)
+        self.application.add_handler(CommandHandler("describe", self.describe_command))
+        
+
         
         # Обработчик для личных сообщений (все текстовые)
         self.application.add_handler(MessageHandler(
@@ -60,13 +65,7 @@ class DiscoCoopBot:
             self.handle_private_message
         ))
         
-        # Диагностический обработчик - ловит ВСЕ сообщения для отладки
-        self.application.add_handler(MessageHandler(
-            filters.ALL,
-            self.debug_all_messages
-        ))
-        
-        # Обработчик для групп - все текстовые сообщения (фильтруем внутри функции)
+        # Обработчик для групп - фильтруем упоминания конкретно этого бота
         self.application.add_handler(MessageHandler(
             (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.TEXT,
             self.handle_group_message
@@ -239,65 +238,29 @@ class DiscoCoopBot:
         
         await update.message.reply_text(status_text, parse_mode='Markdown')
     
-    async def debug_all_messages(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Диагностический обработчик - логирует ВСЕ входящие сообщения"""
-        if not update.message:
-            return
-            
-        chat_type = update.effective_chat.type
-        chat_id = update.effective_chat.id
-        chat_title = getattr(update.effective_chat, 'title', 'No Title')
-        user_name = update.effective_user.username or update.effective_user.first_name
-        message_text = update.message.text or "[НЕТ ТЕКСТА]"
-        
-        logger.info(f"🔍 ДИАГНОСТИКА - ВСЕ СООБЩЕНИЯ:")
-        logger.info(f"   Chat Type: {chat_type}")
-        logger.info(f"   Chat ID: {chat_id}")
-        logger.info(f"   Chat Title: {chat_title}")
-        logger.info(f"   User: {user_name} (ID: {update.effective_user.id})")
-        logger.info(f"   Text: '{message_text}'")
-        logger.info(f"   Is Command: {message_text.startswith('/')}")
-        logger.info(f"---")
-    
     async def handle_private_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик личных сообщений"""
         await self.handle_game_command(update, context)
     
     async def handle_group_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработчик сообщений в группах (фильтруем упоминания и команды)"""
-        chat_id = update.effective_chat.id
-        chat_title = getattr(update.effective_chat, 'title', 'Group')
+        """Обработчик сообщений в группах - только упоминания этого бота"""
         message_text = update.message.text or ""
-        user_name = update.effective_user.username or update.effective_user.first_name
-        
-        # ВСЕГДА логируем все входящие сообщения в группах для диагностики
-        logger.info(f"📩 ГРУППА {chat_title} (ID: {chat_id})")
-        logger.info(f"   От: {user_name} (ID: {update.effective_user.id})")
-        logger.info(f"   Текст: '{message_text}'")
         
         # Получаем информацию о боте
         bot_info = await context.bot.get_me()
         bot_username = bot_info.username
         
-        # Проверяем что сообщение адресовано боту
-        is_mention = f'@{bot_username}' in message_text
+        # Проверяем упоминание КОНКРЕТНО этого бота
+        is_direct_mention = f'@{bot_username}' in message_text
+        
+        # Проверяем ответ на сообщение этого бота
         is_reply_to_bot = (update.message.reply_to_message and 
                          update.message.reply_to_message.from_user.id == bot_info.id)
-        is_command = message_text.startswith('/')
         
-        logger.info(f"   Бот: @{bot_username}")
-        logger.info(f"   Упоминание: {is_mention}")
-        logger.info(f"   Ответ на бота: {is_reply_to_bot}")
-        logger.info(f"   Команда: {is_command}")
-        
-        # Обрабатываем только если сообщение адресовано боту
-        if is_mention or is_reply_to_bot:
-            logger.info(f"✅ ОБРАБАТЫВАЕМ сообщение в группе")
+        # Обрабатываем только если сообщение адресовано именно этому боту
+        if is_direct_mention or is_reply_to_bot:
+            logger.info(f"📩 Сообщение для @{bot_username} в группе: {message_text[:50]}...")
             await self.handle_game_command(update, context)
-        elif is_command:
-            logger.info(f"📋 КОМАНДА в группе - обрабатывается отдельным CommandHandler")
-        else:
-            logger.info(f"❌ ИГНОРИРУЕМ сообщение в группе - не адресовано боту")
     
     async def game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Команда /game для игровых действий в группах"""
@@ -307,6 +270,11 @@ class DiscoCoopBot:
         
         # Обрабатываем команду напрямую
         await self.process_game_action(update, context, command_args)
+    
+    async def describe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда /describe для описания текущего экрана"""
+        logger.info(f"📋 Команда /describe")
+        await self.process_game_action(update, context, "описать экран")
     
     async def handle_inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик inline запросов для групп"""
