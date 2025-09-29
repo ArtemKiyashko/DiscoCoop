@@ -60,6 +60,12 @@ class DiscoCoopBot:
             self.handle_private_message
         ))
         
+        # Диагностический обработчик - ловит ВСЕ сообщения для отладки
+        self.application.add_handler(MessageHandler(
+            filters.ALL,
+            self.debug_all_messages
+        ))
+        
         # Обработчик для групп - все текстовые сообщения (фильтруем внутри функции)
         self.application.add_handler(MessageHandler(
             (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.TEXT,
@@ -232,6 +238,26 @@ class DiscoCoopBot:
         """
         
         await update.message.reply_text(status_text, parse_mode='Markdown')
+    
+    async def debug_all_messages(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Диагностический обработчик - логирует ВСЕ входящие сообщения"""
+        if not update.message:
+            return
+            
+        chat_type = update.effective_chat.type
+        chat_id = update.effective_chat.id
+        chat_title = getattr(update.effective_chat, 'title', 'No Title')
+        user_name = update.effective_user.username or update.effective_user.first_name
+        message_text = update.message.text or "[НЕТ ТЕКСТА]"
+        
+        logger.info(f"🔍 ДИАГНОСТИКА - ВСЕ СООБЩЕНИЯ:")
+        logger.info(f"   Chat Type: {chat_type}")
+        logger.info(f"   Chat ID: {chat_id}")
+        logger.info(f"   Chat Title: {chat_title}")
+        logger.info(f"   User: {user_name} (ID: {update.effective_user.id})")
+        logger.info(f"   Text: '{message_text}'")
+        logger.info(f"   Is Command: {message_text.startswith('/')}")
+        logger.info(f"---")
     
     async def handle_private_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик личных сообщений"""
