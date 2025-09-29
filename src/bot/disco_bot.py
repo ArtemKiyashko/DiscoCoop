@@ -60,10 +60,9 @@ class DiscoCoopBot:
             self.handle_private_message
         ))
         
-        # Обработчик для групп - только упоминания и ответы (из-за Privacy Mode)
+        # Обработчик для групп - все текстовые сообщения (фильтруем внутри функции)
         self.application.add_handler(MessageHandler(
-            (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & 
-            filters.TEXT & ~filters.COMMAND,
+            (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.TEXT,
             self.handle_group_message
         ))
         
@@ -245,6 +244,11 @@ class DiscoCoopBot:
         message_text = update.message.text or ""
         user_name = update.effective_user.username or update.effective_user.first_name
         
+        # ВСЕГДА логируем все входящие сообщения в группах для диагностики
+        logger.info(f"📩 ГРУППА {chat_title} (ID: {chat_id})")
+        logger.info(f"   От: {user_name} (ID: {update.effective_user.id})")
+        logger.info(f"   Текст: '{message_text}'")
+        
         # Получаем информацию о боте
         bot_info = await context.bot.get_me()
         bot_username = bot_info.username
@@ -255,15 +259,19 @@ class DiscoCoopBot:
                          update.message.reply_to_message.from_user.id == bot_info.id)
         is_command = message_text.startswith('/')
         
-        logger.debug(f"📩 Сообщение в группе {chat_title}: {message_text[:50]}...")
-        logger.debug(f"   Упоминание: {is_mention}, Ответ: {is_reply_to_bot}, Команда: {is_command}")
+        logger.info(f"   Бот: @{bot_username}")
+        logger.info(f"   Упоминание: {is_mention}")
+        logger.info(f"   Ответ на бота: {is_reply_to_bot}")
+        logger.info(f"   Команда: {is_command}")
         
         # Обрабатываем только если сообщение адресовано боту
-        if is_mention or is_reply_to_bot or is_command:
-            logger.info(f"✅ Обрабатываем сообщение в группе от {user_name}")
+        if is_mention or is_reply_to_bot:
+            logger.info(f"✅ ОБРАБАТЫВАЕМ сообщение в группе")
             await self.handle_game_command(update, context)
+        elif is_command:
+            logger.info(f"📋 КОМАНДА в группе - обрабатывается отдельным CommandHandler")
         else:
-            logger.debug(f"🔇 Игнорируем сообщение в группе - не адресовано боту")
+            logger.info(f"❌ ИГНОРИРУЕМ сообщение в группе - не адресовано боту")
     
     async def game_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Команда /game для игровых действий в группах"""
