@@ -1,0 +1,18 @@
+[Unit]
+Description=Disco Coop Telegram Bot
+After=ollama.service
+Requires=ollama.service
+
+[Service]
+Type=simple
+ExecStart=PYTHON_DIR_PLACEHOLDER/bin/python3 CURRENT_DIR_PLACEHOLDER/main.py
+Environment=PATH=PYTHON_DIR_PLACEHOLDER/bin:LOCAL_BIN_PLACEHOLDER:$PATH
+Environment=HOME=HOME_PLACEHOLDER
+WorkingDirectory=CURRENT_DIR_PLACEHOLDER
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

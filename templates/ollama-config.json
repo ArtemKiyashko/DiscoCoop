@@ -1,0 +1,4 @@
+{
+  "origins": ["*"],
+  "models_path": "HOME_PLACEHOLDER/.ollama/models"
+}

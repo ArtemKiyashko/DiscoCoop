@@ -22,23 +22,7 @@ log_success() {
 }
 
 log_warning() {
-    echo "[$(date '+%Y-%m-%d %H:    --clean)
-        log_info "🗑️  Очистка установки..."
-        rm -rf "$PYTHON_DIR" "$OLLAMA_DIR" "$LOCAL_BIN"
-        rm -f test_setup.py
-        systemctl --user stop ollama disco-coop-bot 2>/dev/null || true
-        systemctl --user disable ollama disco-coop-bot 2>/dev/null || true
-        rm -f "$HOME/.config/systemd/user/ollama.service"
-        rm -f "$HOME/.config/systemd/user/disco-coop-bot.service"
-        systemctl --user daemon-reload
-        log_success "Очистка завершена"
-        exit 0
-        ;;
-    --reinstall)
-        log_info "🔄 Переустановка..."
-        main
-        exit $?
-        ;;&2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️  $1" >&2
 }
 
 log_error() {
@@ -106,105 +90,23 @@ create_image_tools() {
     mkdir -p "$LOCAL_BIN"
     
     # Проверяем доступные системные инструменты
-    local screenshot_tool=""
     for tool in gnome-screenshot spectacle scrot flameshot; do
         if command -v "$tool" &> /dev/null; then
-            screenshot_tool="$tool"
             log_info "Найден инструмент скриншотов: $tool"
             break
         fi
     done
     
-    # Создаем wrapper для xwd
-    cat > "$LOCAL_BIN/xwd" << 'EOF'
-#!/bin/bash
-# xwd replacement for Steam Deck
-
-OUTPUT="${*: -1}"
-[ -z "$OUTPUT" ] && OUTPUT="screenshot.png"
-
-# Ensure .png extension
-case "$OUTPUT" in
-    *.png) ;;
-    *.xwd) OUTPUT="${OUTPUT%.xwd}.png" ;;
-    *) OUTPUT="$OUTPUT.png" ;;
-esac
-
-# Try available screenshot tools
-if command -v gnome-screenshot &> /dev/null; then
-    gnome-screenshot -f "$OUTPUT"
-elif command -v spectacle &> /dev/null; then
-    spectacle -b -n -o "$OUTPUT"  
-elif command -v scrot &> /dev/null; then
-    scrot "$OUTPUT"
-elif command -v flameshot &> /dev/null; then
-    flameshot full -p "$(dirname "$OUTPUT")" -f "$(basename "$OUTPUT")"
-else
-    echo "⚠️  Нет доступных инструментов для скриншотов" >&2
-    echo "💡 Создается заглушка..." >&2
-    # Create a simple 1x1 PNG as fallback
-    python3 -c "
-import struct
-def create_png():
-    # Minimal 1x1 red PNG
-    data = b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x02\\x00\\x00\\x00\\x90wS\\xde\\x00\\x00\\x00\\x0cIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x18\\xdd\\x8d\\xb4\\x00\\x00\\x00\\x00IEND\\xaeB\`\\x82'
-    return data
-with open('$OUTPUT', 'wb') as f:
-    f.write(create_png())
-"
-fi
-EOF
-    chmod +x "$LOCAL_BIN/xwd"
-    
-    # Создаем wrapper для convert  
-    cat > "$LOCAL_BIN/convert" << 'EOF'
-#!/bin/bash
-# ImageMagick convert replacement
-
-# Simple convert functionality using Python
-if [[ "$*" == *"-size"* && "$*" == *"xc:"* ]]; then
-    # Handle: convert -size 100x100 xc:red output.png
-    OUTPUT="${*: -1}"
-    python3 -c "
-import struct
-def create_png():
-    # Minimal 1x1 PNG
-    data = b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x02\\x00\\x00\\x00\\x90wS\\xde\\x00\\x00\\x00\\x0cIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x18\\xdd\\x8d\\xb4\\x00\\x00\\x00\\x00IEND\\xaeB\`\\x82'
-    return data
-with open('$OUTPUT', 'wb') as f:
-    f.write(create_png())
-"
-elif command -v ffmpeg &> /dev/null && [ $# -ge 2 ]; then
-    # Use ffmpeg for actual conversions
-    INPUT=""
-    OUTPUT=""
-    for arg in "$@"; do
-        if [[ -f "$arg" ]]; then
-            INPUT="$arg"
-        elif [[ "$arg" == *"."* && "$arg" != "-"* ]]; then
-            OUTPUT="$arg" 
+    # Копируем wrapper скрипты из шаблонов
+    for wrapper in xwd convert import; do
+        if [ -f "templates/${wrapper}-wrapper.sh" ]; then
+            cp "templates/${wrapper}-wrapper.sh" "$LOCAL_BIN/$wrapper"
+            chmod +x "$LOCAL_BIN/$wrapper"
+        else
+            log_error "Шаблон ${wrapper}-wrapper.sh не найден"
+            exit 1
         fi
     done
-    
-    if [[ -n "$INPUT" && -n "$OUTPUT" ]]; then
-        ffmpeg -y -i "$INPUT" "$OUTPUT" 2>/dev/null
-    else
-        echo "⚠️  Упрощенная поддержка convert" >&2
-    fi
-else
-    echo "⚠️  convert: базовая поддержка" >&2
-    echo "💡 Для полной поддержки установите ffmpeg" >&2
-fi
-EOF
-    chmod +x "$LOCAL_BIN/convert"
-    
-    # Wrapper для import
-    cat > "$LOCAL_BIN/import" << 'EOF'
-#!/bin/bash  
-# ImageMagick import replacement
-exec "$HOME/.local/bin/xwd" "$@"
-EOF
-    chmod +x "$LOCAL_BIN/import"
     
     log_success "Инструменты скриншотов настроены"
 }
@@ -242,14 +144,14 @@ install_ollama() {
         exit 1
     fi
     
-    # Создаем конфигурационный файл
+    # Создаем конфигурационный файл из шаблона
     mkdir -p "$HOME/.ollama"
-    cat > "$HOME/.ollama/config.json" << EOF
-{
-  "origins": ["*"],
-  "models_path": "$HOME/.ollama/models"
-}
-EOF
+    if [ -f "templates/ollama-config.json" ]; then
+        sed "s|HOME_PLACEHOLDER|$HOME|g" templates/ollama-config.json > "$HOME/.ollama/config.json"
+    else
+        log_error "Шаблон ollama-config.json не найден"
+        exit 1
+    fi
     
     log_success "Ollama настроен"
 }
@@ -299,91 +201,13 @@ install_project() {
     # Создаем директории
     mkdir -p screenshots logs
     
-    # Создаем простой тестовый скрипт
-    cat > test_setup.py << 'EOF'
-#!/usr/bin/env python3
-"""Тест настройки окружения"""
-
-import sys
-import os
-
-def test_imports():
-    """Тестируем импорты"""
-    try:
-        import telegram
-        print(f"✅ python-telegram-bot: {telegram.__version__}")
-    except ImportError as e:
-        print(f"❌ python-telegram-bot: {e}")
-        return False
-    
-    try:
-        import dotenv
-        print("✅ python-dotenv: OK")
-    except ImportError as e:
-        print(f"❌ python-dotenv: {e}")
-        return False
-        
-    try:
-        import aiohttp
-        print("✅ aiohttp: OK")
-    except ImportError as e:
-        print(f"❌ aiohttp: {e}")
-        return False
-        
-    try:
-        from PIL import Image
-        print("✅ Pillow: OK")
-    except ImportError as e:
-        print(f"❌ Pillow: {e}")
-        return False
-        
-    return True
-
-def test_ollama():
-    """Тестируем Ollama"""
-    ollama_path = os.path.expanduser("~/.local/share/ollama/bin/ollama")
-    if os.path.exists(ollama_path):
-        print(f"✅ Ollama найден: {ollama_path}")
-        return True
-    else:
-        print(f"❌ Ollama не найден: {ollama_path}")
-        return False
-
-def test_tools():
-    """Тестируем инструменты"""
-    tools_ok = True
-    
-    for tool in ["xwd", "convert", "import"]:
-        tool_path = os.path.expanduser(f"~/.local/bin/{tool}")
-        if os.path.exists(tool_path):
-            print(f"✅ {tool}: {tool_path}")
-        else:
-            print(f"❌ {tool}: не найден")
-            tools_ok = False
-            
-    return tools_ok
-
-if __name__ == "__main__":
-    print("🧪 Тестирование настройки...")
-    print("\n📦 Python пакеты:")
-    imports_ok = test_imports()
-    
-    print("\n🤖 Ollama:")
-    ollama_ok = test_ollama()
-    
-    print("\n🛠️  Инструменты:")
-    tools_ok = test_tools()
-    
-    print("\n" + "="*50)
-    if imports_ok and ollama_ok and tools_ok:
-        print("🎉 Все компоненты готовы!")
-        sys.exit(0)
-    else:
-        print("⚠️  Некоторые компоненты требуют внимания")
-        sys.exit(1)
-EOF
-    
-    chmod +x test_setup.py
+    # Копируем тестовый скрипт из шаблона
+    if [ -f "templates/test_setup.py" ]; then
+        cp templates/test_setup.py .
+        chmod +x test_setup.py
+    else
+        log_warning "Шаблон test_setup.py не найден, тест недоступен"
+    fi
     
     log_success "Проект настроен"
 }
@@ -397,49 +221,27 @@ setup_services() {
     
     mkdir -p "$user_service_dir"
     
-    # Сервис Ollama
-    cat > "$user_service_dir/ollama.service" << EOF
-[Unit]
-Description=Ollama Server
-After=network.target
-Wants=network-online.target
+    # Создаем сервис Ollama из шаблона
+    if [ -f "templates/ollama.service" ]; then
+        sed -e "s|OLLAMA_DIR_PLACEHOLDER|$OLLAMA_DIR|g" \
+            -e "s|HOME_PLACEHOLDER|$HOME|g" \
+            templates/ollama.service > "$user_service_dir/ollama.service"
+    else
+        log_error "Шаблон ollama.service не найден"
+        exit 1
+    fi
 
-[Service]
-Type=simple
-ExecStart=$OLLAMA_DIR/bin/ollama serve
-Environment=OLLAMA_HOST=127.0.0.1:11434
-Environment=HOME=$HOME
-WorkingDirectory=$HOME
-Restart=always
-RestartSec=3
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=default.target
-EOF
-
-    # Сервис бота
-    cat > "$user_service_dir/disco-coop-bot.service" << EOF
-[Unit]
-Description=Disco Coop Telegram Bot
-After=ollama.service
-Requires=ollama.service
-
-[Service]
-Type=simple
-ExecStart=$PYTHON_DIR/bin/python3 $current_dir/main.py
-Environment=PATH=$PYTHON_DIR/bin:$LOCAL_BIN:\$PATH
-Environment=HOME=$HOME
-WorkingDirectory=$current_dir
-Restart=always
-RestartSec=10
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=default.target
-EOF
+    # Создаем сервис бота из шаблона
+    if [ -f "templates/disco-coop-bot.service" ]; then
+        sed -e "s|PYTHON_DIR_PLACEHOLDER|$PYTHON_DIR|g" \
+            -e "s|CURRENT_DIR_PLACEHOLDER|$current_dir|g" \
+            -e "s|LOCAL_BIN_PLACEHOLDER|$LOCAL_BIN|g" \
+            -e "s|HOME_PLACEHOLDER|$HOME|g" \
+            templates/disco-coop-bot.service > "$user_service_dir/disco-coop-bot.service"
+    else
+        log_error "Шаблон disco-coop-bot.service не найден"
+        exit 1
+    fi
 
     # Перезагружаем systemd
     systemctl --user daemon-reload
