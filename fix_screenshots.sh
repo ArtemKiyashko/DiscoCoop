@@ -45,7 +45,11 @@ fi
 
 # Функция для исправления keyring
 fix_keyring() {
-    echo "🔧 Исправление keyring..."
+    echo ""
+    echo "🔧 ==============================="
+    echo "🔧 Исправление keyring pacman"
+    echo "🔧 ==============================="
+    echo ""
     
     echo "🛑 Остановка сервисов..."
     sudo systemctl stop pacman-init.service 2>/dev/null || true
@@ -53,6 +57,9 @@ fix_keyring() {
     echo "🧹 Очистка поврежденного keyring..."
     sudo rm -rf /etc/pacman.d/gnupg
     sudo rm -rf /var/lib/pacman/sync/*
+    
+    # Также очищаем кэш пакетов
+    sudo rm -rf /var/cache/pacman/pkg/*
     
     echo "🔧 Исправление прав доступа..."
     sudo mkdir -p /etc/pacman.d/gnupg
@@ -106,7 +113,11 @@ fix_keyring() {
     echo "🔄 Обновление доверия к ключам..."
     sudo pacman-key --updatedb
     
-    echo "✅ Keyring исправлен"
+    echo ""
+    echo "✅ ==============================="
+    echo "✅ Keyring успешно исправлен!"
+    echo "✅ ==============================="
+    echo ""
 }
 
 # Устанавливаем недостающие пакеты
@@ -140,23 +151,49 @@ if [ ! -z "$MISSING_COMMANDS" ]; then
     
     # Устанавливаем пакеты
     echo "📦 Установка пакетов..."
-    if timeout 300 bash -c "yes 'y' | sudo pacman -S --needed $MISSING_COMMANDS"; then
+    
+    # Создаем временный скрипт для захвата вывода
+    INSTALL_OUTPUT=$(timeout 300 bash -c "yes 'y' | sudo pacman -S --needed $MISSING_COMMANDS" 2>&1)
+    INSTALL_EXIT_CODE=$?
+    
+    if [ $INSTALL_EXIT_CODE -eq 0 ]; then
         echo "✅ Пакеты установлены успешно"
     else
-        echo "❌ Не удалось установить пакеты через pacman"
-        echo ""
-        echo "🛠️  Альтернативные решения:"
-        echo "1. Попробуйте запустить команды вручную:"
-        echo "   sudo steamos-readonly disable"
-        echo "   sudo pacman -Sy"
-        echo "   sudo pacman -S imagemagick xorg-xwd xdotool"
-        echo "   sudo steamos-readonly enable"
-        echo ""
-        echo "2. Или используйте Flatpak версию ImageMagick:"
-        echo "   flatpak install --user flathub org.imagemagick.ImageMagick"
-        echo ""
-        echo "3. Если проблемы с правами, попробуйте:"
-        echo "   sudo passwd deck  # Установите пароль для пользователя deck"
+        echo "❌ Не удалось установить пакеты"
+        
+        # Проверяем, связана ли ошибка с keyring
+        if echo "$INSTALL_OUTPUT" | grep -i "keyring\|key.*missing\|signature"; then
+            echo "🔐 Обнаружена проблема с keyring при установке, исправляем..."
+            fix_keyring
+            
+            # Пробуем установить пакеты еще раз после исправления keyring
+            echo "📦 Повторная попытка установки пакетов..."
+            if timeout 300 bash -c "yes 'y' | sudo pacman -S --needed $MISSING_COMMANDS"; then
+                echo "✅ Пакеты установлены успешно после исправления keyring"
+            else
+                echo "❌ Не удалось установить пакеты даже после исправления keyring"
+                echo ""
+                echo "🛠️  Дополнительные решения:"
+                echo "1. Перезагрузите Steam Deck и попробуйте еще раз"
+                echo "2. Или используйте Flatpak версию ImageMagick:"
+                echo "   flatpak install --user flathub org.imagemagick.ImageMagick"
+            fi
+        else
+            echo ""
+            echo "🛠️  Альтернативные решения:"
+            echo "1. Попробуйте запустить команды вручную:"
+            echo "   sudo steamos-readonly disable"
+            echo "   sudo pacman -Sy"
+            echo "   sudo pacman -S imagemagick xorg-xwd xdotool"
+            echo "   sudo steamos-readonly enable"
+            echo ""
+            echo "2. Или используйте Flatpak версию ImageMagick:"
+            echo "   flatpak install --user flathub org.imagemagick.ImageMagick"
+            echo ""
+            echo "3. Если проблемы с правами, попробуйте:"
+            echo "   sudo passwd deck  # Установите пароль для пользователя deck"
+        fi
+    fi
         
         # Возвращаем файловую систему в read-only
         sudo steamos-readonly enable 2>/dev/null || true
@@ -270,22 +307,46 @@ except ImportError:
 " 2>/dev/null
 
 echo ""
-echo "🎉 Диагностика завершена!"
+echo "🎉 Исправление завершено!"
 echo ""
-echo "📋 Следующие шаги:"
-echo "=================="
 
-if [ -z "$MISSING_COMMANDS" ]; then
-    echo "✅ Все системные команды установлены"
-    echo "✅ Попробуйте запустить бота еще раз"
-    echo ""
-    echo "Если проблемы продолжаются:"
-    echo "1. Убедитесь что вы в Desktop Mode"
-    echo "2. Проверьте что Disco Elysium запущен"
-    echo "3. Попробуйте команду: ./start.sh"
+# Финальная проверка
+echo "� Финальная проверка команд..."
+FINAL_MISSING=""
+
+if ! command -v convert &> /dev/null; then
+    echo "❌ convert всё ещё отсутствует"
+    FINAL_MISSING="$FINAL_MISSING convert"
 else
-    echo "❌ Некоторые команды отсутствуют"
-    echo "💡 Запустите этот скрипт еще раз с правами администратора"
+    echo "✅ convert найден"
+fi
+
+if ! command -v xwd &> /dev/null; then
+    echo "❌ xwd всё ещё отсутствует"
+    FINAL_MISSING="$FINAL_MISSING xwd"
+else
+    echo "✅ xwd найден"
+fi
+
+echo ""
+echo "📋 Результат:"
+echo "=============="
+
+if [ -z "$FINAL_MISSING" ]; then
+    echo "🎉 ВСЕ КОМАНДЫ УСТАНОВЛЕНЫ УСПЕШНО!"
+    echo "✅ Скриншоты должны работать"
+    echo ""
+    echo "💡 Теперь можете:"
+    echo "   1. Запустить бота: ./start.sh"
+    echo "   2. Попробовать команду /describe в Telegram"
+    echo "   3. Проверить что Disco Elysium запущен"
+else
+    echo "❌ Некоторые команды всё ещё отсутствуют:$FINAL_MISSING"
+    echo ""
+    echo "💡 Возможные решения:"
+    echo "   1. Перезагрузите Steam Deck"
+    echo "   2. Запустите скрипт повторно"
+    echo "   3. Попробуйте ручную установку"
 fi
 
 echo ""
