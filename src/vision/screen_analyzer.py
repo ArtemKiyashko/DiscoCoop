@@ -73,9 +73,21 @@ class ScreenAnalyzer:
                 return screenshot
                 
         except Exception as e:
-            print(f"Linux screenshot error: {e}")
+            error_msg = str(e)
+            print(f"Linux screenshot error: {error_msg}")
+            
+            # Проверяем на конкретные ошибки и даем советы
+            if "convert: command not found" in error_msg or "xwd" in error_msg:
+                print("💡 Отсутствуют системные команды для скриншотов.")
+                print("   Запустите: cd ~/disco_coop && ./fix_screenshots.sh")
+                print("   Или установите: sudo pacman -S imagemagick xorg-xwd")
+            
             # Fallback на обычный скриншот экрана
-            return ImageGrab.grab()
+            try:
+                return ImageGrab.grab()
+            except Exception as fallback_e:
+                print(f"Fallback screenshot also failed: {fallback_e}")
+                return None
     
     async def _take_screenshot_macos(self) -> Optional[Image.Image]:
         """Захват скриншота в macOS"""

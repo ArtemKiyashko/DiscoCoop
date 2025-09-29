@@ -199,6 +199,21 @@ cd ~/disco_coop
 - ❌ Неправильные пути в сервисе
 - ❌ Проблемы с конфигурацией
 
+#### Проблемы со скриншотами
+
+Если команда `/describe` выдает ошибки `convert: command not found` или `xwd: command not found`:
+
+```bash
+cd ~/disco_coop
+./fix_screenshots.sh
+```
+
+**Скрипт исправляет:**
+- ❌ Отсутствующий ImageMagick (`convert`)
+- ❌ Отсутствующий xorg-xwd (`xwd`)
+- ❌ Проблемы с правами доступа к X сессии
+- ❌ Неправильная конфигурация скриншотов
+
 **Проверка работы сервисов:**
 ```bash
 sudo systemctl status ollama        # Статус Ollama
