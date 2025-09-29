@@ -187,6 +187,96 @@ fi
 
 echo "🔧 Используем: $PYTHON_CMD"
 
+# Функция для установки альтернативными методами
+install_screenshot_tools() {
+    log_info "🖼️  Установка инструментов для скриншотов..."
+    
+    # Проверяем доступность команд
+    if command -v convert &> /dev/null && command -v xwd &> /dev/null; then
+        log_info "✅ convert и xwd уже доступны"
+        return 0
+    fi
+    
+    # Метод 1: Попытка через Flatpak
+    if command -v flatpak &> /dev/null; then
+        log_info "📦 Попытка установки через Flatpak..."
+        
+        # ImageMagick через Flatpak
+        if ! command -v convert &> /dev/null; then
+            flatpak install --user -y flathub org.imagemagick.ImageMagick 2>/dev/null && {
+                log_info "✅ ImageMagick установлен через Flatpak"
+                # Создаем wrapper для convert
+                mkdir -p "$HOME/.local/bin"
+                cat > "$HOME/.local/bin/convert" << 'EOF'
+#!/bin/bash
+exec flatpak run org.imagemagick.ImageMagick convert "$@"
+EOF
+                chmod +x "$HOME/.local/bin/convert"
+                export PATH="$HOME/.local/bin:$PATH"
+                echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+            } || log_warning "Не удалось установить ImageMagick через Flatpak"
+        fi
+    fi
+    
+    # Метод 2: Загрузка статических бинарников
+    if ! command -v convert &> /dev/null || ! command -v xwd &> /dev/null; then
+        log_info "📥 Загрузка статических бинарников..."
+        
+        mkdir -p "$HOME/.local/bin"
+        cd /tmp
+        
+        # ImageMagick статический бинарник
+        if ! command -v convert &> /dev/null; then
+            log_info "📥 Загрузка ImageMagick..."
+            if curl -L "https://github.com/SoftCreatR/imei/releases/latest/download/imei-linux-x86_64" -o imagemagick-convert 2>/dev/null; then
+                chmod +x imagemagick-convert
+                mv imagemagick-convert "$HOME/.local/bin/convert"
+                log_info "✅ ImageMagick установлен статически"
+            else
+                log_warning "Не удалось загрузить ImageMagick"
+            fi
+        fi
+        
+        # xwd и xdotool - попытка загрузить из репозиториев Ubuntu
+        if ! command -v xwd &> /dev/null; then
+            log_info "📥 Попытка загрузки xwd..."
+            # Создаем простую замену xwd через xwininfo и import
+            cat > "$HOME/.local/bin/xwd" << 'EOF'
+#!/bin/bash
+# Простая замена xwd
+if command -v import &> /dev/null; then
+    # Используем ImageMagick import
+    import "$@"
+elif command -v gnome-screenshot &> /dev/null; then
+    # Используем gnome-screenshot
+    gnome-screenshot -f "${@: -1}"
+else
+    echo "❌ Нет доступных инструментов для скриншотов" >&2
+    exit 1
+fi
+EOF
+            chmod +x "$HOME/.local/bin/xwd"
+            log_info "✅ Создан wrapper для xwd"
+        fi
+        
+        export PATH="$HOME/.local/bin:$PATH"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        cd "$PROJECT_DIR"
+    fi
+    
+    # Проверяем результат
+    if command -v convert &> /dev/null && command -v xwd &> /dev/null; then
+        log_info "✅ Инструменты для скриншотов готовы"
+        return 0
+    else
+        log_warning "⚠️  Не все инструменты установлены, но продолжаем..."
+        return 1
+    fi
+}
+
+# Устанавливаем инструменты для скриншотов
+install_screenshot_tools
+
 # Создаем виртуальное окружение
 if ! $PYTHON_CMD -m venv venv; then
     echo "❌ Не удалось создать виртуальное окружение"

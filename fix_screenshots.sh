@@ -265,6 +265,88 @@ else
     echo "✅ Все необходимые команды найдены"
 fi
 
+# Если pacman не сработал, пробуем альтернативные методы
+if [ -n "$MISSING_COMMANDS" ]; then
+    echo ""
+    echo "🔄 Попытка установки альтернативными методами..."
+    
+    # Метод 1: Flatpak
+    if command -v flatpak &> /dev/null; then
+        echo "📦 Попытка установки через Flatpak..."
+        
+        if echo "$MISSING_COMMANDS" | grep -q "convert\|imagemagick"; then
+            echo "  Установка ImageMagick через Flatpak..."
+            if flatpak install --user -y flathub org.imagemagick.ImageMagick 2>/dev/null; then
+                echo "✅ ImageMagick установлен через Flatpak"
+                # Создаем wrapper
+                mkdir -p "$HOME/.local/bin"
+                cat > "$HOME/.local/bin/convert" << 'EOF'
+#!/bin/bash
+exec flatpak run org.imagemagick.ImageMagick convert "$@"
+EOF
+                chmod +x "$HOME/.local/bin/convert"
+                export PATH="$HOME/.local/bin:$PATH"
+            else
+                echo "❌ Не удалось установить через Flatpak"
+            fi
+        fi
+    fi
+    
+    # Метод 2: Статические бинарники
+    echo "📥 Попытка загрузки статических бинарников..."
+    mkdir -p "$HOME/.local/bin"
+    
+    # ImageMagick
+    if echo "$MISSING_COMMANDS" | grep -q "convert\|imagemagick" && ! command -v convert &> /dev/null; then
+        echo "  Загрузка ImageMagick..."
+        if curl -L "https://github.com/SoftCreatR/imei/releases/latest/download/imei-linux-x86_64" -o /tmp/convert 2>/dev/null; then
+            chmod +x /tmp/convert
+            mv /tmp/convert "$HOME/.local/bin/convert"
+            echo "✅ ImageMagick установлен"
+        else
+            echo "❌ Не удалось загрузить ImageMagick"
+        fi
+    fi
+    
+    # xwd wrapper
+    if echo "$MISSING_COMMANDS" | grep -q "xwd" && ! command -v xwd &> /dev/null; then
+        echo "  Создание wrapper для xwd..."
+        cat > "$HOME/.local/bin/xwd" << 'EOF'
+#!/bin/bash
+# Wrapper для xwd
+if command -v import &> /dev/null; then
+    import "$@"
+elif command -v gnome-screenshot &> /dev/null; then
+    gnome-screenshot -f "${@: -1}"
+else
+    echo "❌ Нет доступных инструментов для скриншотов" >&2
+    exit 1
+fi
+EOF
+        chmod +x "$HOME/.local/bin/xwd"
+        echo "✅ Wrapper для xwd создан"
+    fi
+    
+    # Добавляем в PATH
+    export PATH="$HOME/.local/bin:$PATH"
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc 2>/dev/null || true
+    
+    # Перепроверяем команды
+    MISSING_COMMANDS=""
+    for cmd in convert xwd xdotool import; do
+        if ! command -v "$cmd" &> /dev/null; then
+            MISSING_COMMANDS="$MISSING_COMMANDS $cmd"
+        fi
+    done
+    
+    if [ -n "$MISSING_COMMANDS" ]; then
+        echo "⚠️  Не удалось установить:$MISSING_COMMANDS"
+        echo "💡 Но система может работать с ограниченной функциональностью"
+    else
+        echo "✅ Все команды теперь доступны!"
+    fi
+fi
+
 echo ""
 echo "🧪 Тестирование системы скриншотов..."
 
