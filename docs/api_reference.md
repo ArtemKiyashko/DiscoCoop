@@ -31,7 +31,7 @@ config = Config.load()
 bot = DiscoCoopBot(config)
 
 # Запуск
-await bot.run()
+bot.run()  # Синхронный метод
 ```
 
 ### LLMAgent
@@ -46,8 +46,8 @@ agent = LLMAgent(config)
 # Проверка доступности
 is_available = await agent.is_available()
 
-# Обработка команды пользователя
-result = await agent.process_command("подойти к двери", screenshot)
+# Обработка команды пользователя  
+result = await agent.process_user_command("подойти к двери", screenshot_path="screenshot.png")
 
 # Описание экрана
 description = await agent.describe_screen(screenshot)

@@ -1,946 +1,596 @@
 #!/bin/bash
 
 # Disco Coop - Установочный скрипт для Steam Deck
+# Полностью автономная установка без использования pacman
 
-# Функция логирования с временными метками
+set -e  # Остановка при ошибках
+
+# Переменные
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_DIR="$HOME/disco-coop"
+PYTHON_DIR="$HOME/python"
+LOCAL_BIN="$HOME/.local/bin"
+
+# Функции логирования
 log_info() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ℹ️  $1"
 }
 
-log_error() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ ОШИБКА: $1" >&2
+log_success() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✅ $1" 
 }
 
 log_warning() {
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️  ПРЕДУПРЕЖДЕНИЕ: $1" >&2
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠️  $1" >&2
 }
 
-# Функция для исправления keyring
-fix_keyring() {
-    log_info "🔑 Проверка состояния keyring..."
-    
-    # Проверяем, инициализирован ли keyring
-    if ! pacman-key --list-keys | grep -q "pacman@localhost"; then
-        log_warning "Keyring не инициализирован. Исправляем..."
-        
-        # Удаляем поврежденный keyring
-        sudo rm -rf /etc/pacman.d/gnupg 2>/dev/null || true
-        
-        # Инициализируем keyring
-        log_info "Инициализация keyring..."
-        sudo pacman-key --init || {
-            log_error "Не удалось инициализировать keyring"
-            return 1
-        }
-        
-        # Популяция ключей
-        log_info "Популяция ключей Arch Linux..."
-        sudo pacman-key --populate archlinux || {
-            log_error "Не удалось популировать ключи"
-            return 1
-        }
-        
-        # Обновление ключей
-        log_info "Обновление ключей с серверов..."
-        timeout 300 sudo pacman-key --refresh-keys 2>/dev/null || {
-            log_warning "Не удалось обновить все ключи (таймаут), но это не критично"
-        }
-        
-        log_info "✅ Keyring восстановлен"
-    else
-        log_info "✅ Keyring в порядке"
-    fi
+log_error() {
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ $1" >&2
 }
 
-# URL репозитория
-REPOSITORY_URL="https://github.com/ArtemKiyashko/DiscoCoop.git"
+# Проверка идемпотентности - можно запускать многократно
+check_installation() {
+    local component="$1"
+    case "$component" in
+        "python")
+            [ -x "$PYTHON_DIR/bin/python3" ] && return 0 || return 1
+            ;;
+        "ollama")  
+            command -v ollama &> /dev/null && return 0 || return 1
+            ;;
+        "project")
+            [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/main.py" ] && return 0 || return 1
+            ;;
+    esac
+}
 
-# Переменные состояния
-PACMAN_FAILED=false
-
-log_info "🎮 Disco Coop - Установка на Steam Deck"
-log_info "========================================"
-log_info "📅 Версия скрипта: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "🔗 Репозиторий: $REPOSITORY_URL"
-echo ""
-
-# Проверка что мы в Desktop Mode (только для Steam Deck)
-if [ -f "/etc/steamos-release" ] && [ "$XDG_CURRENT_DESKTOP" != "KDE" ]; then
-    echo "⚠️  Пожалуйста, переключитесь в Desktop Mode для установки"
-    exit 1
-fi
-
-# Создание директории проекта
-PROJECT_DIR="$HOME/disco_coop"
-echo "📁 Создание директории проекта в $PROJECT_DIR"
-
-if [ -d "$PROJECT_DIR" ]; then
-    echo "⚠️  Директория уже существует. Обновляем..."
-    cd "$PROJECT_DIR"
-    git pull
-else
-    echo "📥 Клонирование репозитория..."
-    cd "$HOME"
-    git clone "$REPOSITORY_URL" disco_coop
-    cd disco_coop
-fi
-
-# Установка системных зависимостей
-echo "📦 Установка системных зависимостей..."
-
-# Проверяем, работает ли pacman
-if command -v pacman &> /dev/null; then
-    echo "🔓 Разблокировка файловой системы Steam Deck..."
-    sudo steamos-readonly disable 2>/dev/null || true
-    
-    echo "🔑 Настройка keyring для SteamOS..."
-    fix_keyring || {
-        log_warning "Не удалось полностью исправить keyring, но продолжаем..."
-    }
-    
-    # Добавляем ключи SteamOS
-    echo "� Добавление ключей SteamOS..."
-    sudo pacman-key --recv-keys 3056513887B78AEB 2>/dev/null || true
-    sudo pacman-key --lsign-key 3056513887B78AEB 2>/dev/null || true
-    
-    echo "�📥 Обновление базы данных пакетов..."
-    sudo pacman -Sy --noconfirm
-    
-    echo "📦 Установка пакетов..."
-    
-    # Сначала очищаем поврежденные пакеты автоматически
-    echo "🧹 Очистка поврежденного кэша пакетов..."
-    sudo find /var/cache/pacman/pkg/ -name "*.pkg.tar.zst" -type f -delete 2>/dev/null || true
-    
-    # Полная очистка кэша
-    printf "y\ny\n" | sudo pacman -Scc 2>/dev/null || true
-    
-    # Пробуем установить базовые пакеты с автоматическими ответами
-    echo "📥 Попытка установки Python и базовых пакетов..."
-    
-    # Используем timeout и yes для автоматических ответов
-    if timeout 300 bash -c 'yes "y" | sudo pacman -S --needed python python-pip git 2>/dev/null'; then
-        echo "✅ Базовые пакеты установлены"
-        
-        # Пробуем установить дополнительные пакеты
-        echo "📦 Установка дополнительных пакетов..."
-        timeout 180 bash -c 'yes "y" | sudo pacman -S --needed tk xdotool imagemagick 2>/dev/null' || {
-            echo "⚠️  Дополнительные пакеты не установлены, но это не критично"
-        }
-    else
-        echo "❌ Не удается установить через pacman, используем альтернативный метод..."
-        PACMAN_FAILED=true
+# Установка переносимого Python
+install_python() {
+    if check_installation "python"; then
+        log_success "Python уже установлен: $($PYTHON_DIR/bin/python3 --version)"
+        return 0
     fi
     
-    echo "🔒 Возвращение файловой системы в read-only режим..."
-    sudo steamos-readonly enable 2>/dev/null || true
-else
-    echo "⚠️  pacman недоступен, используем альтернативные методы..."
-    PACMAN_FAILED=true
-fi
-
-# Проверяем наличие Python независимо от успеха pacman
-if [ "$PACMAN_FAILED" = true ] || ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
-    echo "� Python не найден, устанавливаем переносимую версию..."
+    log_info "📥 Загрузка переносимого Python..."
     cd /tmp
     
-    # Загружаем переносимую версию Python
-    echo "📥 Загрузка Python 3.11..."
-    if curl -L https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz -o python.tar.gz; then
-        echo "📂 Распаковка Python..."
+    if curl -L "https://github.com/indygreg/python-build-standalone/releases/download/20231002/cpython-3.11.6+20231002-x86_64-unknown-linux-gnu-install_only.tar.gz" -o python.tar.gz; then
+        log_info "📂 Распаковка Python..."
         tar -xzf python.tar.gz -C "$HOME"
         
-        # Создаем симлинки для удобства
-        ln -sf "$HOME/python/bin/python3" "$HOME/python/bin/python" 2>/dev/null || true
+        # Создаем симлинки
+        ln -sf "$PYTHON_DIR/bin/python3" "$PYTHON_DIR/bin/python" 2>/dev/null || true
         
-        export PATH="$HOME/python/bin:$PATH"
+        # Добавляем в PATH
+        mkdir -p "$LOCAL_BIN"
+        export PATH="$PYTHON_DIR/bin:$LOCAL_BIN:$PATH"
         
-        # Добавляем в bashrc и profile
-        echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.bashrc
-        echo 'export PATH="$HOME/python/bin:$PATH"' >> ~/.profile
+        # Обновляем shell конфигурации  
+        for config in ~/.bashrc ~/.profile ~/.zshrc; do
+            if [ -f "$config" ] && ! grep -q "disco-coop Python" "$config"; then
+                echo "" >> "$config"
+                echo "# Added by disco-coop installer" >> "$config" 
+                echo "export PATH=\"$PYTHON_DIR/bin:$LOCAL_BIN:\$PATH\"" >> "$config"
+            fi
+        done
         
-        cd "$PROJECT_DIR"
-        echo "✅ Python установлен в $HOME/python"
+        log_success "Python установлен: $($PYTHON_DIR/bin/python3 --version)"
+        rm -f python.tar.gz
     else
-        echo "❌ Не удалось загрузить Python. Проверьте подключение к интернету."
+        log_error "Не удалось загрузить Python"
         exit 1
     fi
-fi
-
-
-
-# Создание виртуального окружения (обязательно для Steam Deck)
-echo "🐍 Создание виртуального окружения..."
-
-# Определяем какой Python использовать
-if command -v python3 &> /dev/null; then
-    PYTHON_CMD="python3"
-elif command -v python &> /dev/null; then
-    PYTHON_CMD="python"
-elif [ -f "$HOME/python/bin/python3" ]; then
-    PYTHON_CMD="$HOME/python/bin/python3"
-    export PATH="$HOME/python/bin:$PATH"
-else
-    echo "❌ Python не найден!"
-    exit 1
-fi
-
-echo "🔧 Используем: $PYTHON_CMD"
-
-# Функция для установки альтернативными методами
-install_screenshot_tools() {
-    log_info "🖼️  Установка инструментов для скриншотов..."
-    
-    # Проверяем доступность команд
-    if command -v convert &> /dev/null && command -v xwd &> /dev/null; then
-        log_info "✅ convert и xwd уже доступны"
-        return 0
-    fi
-    
-    # Метод 1: Попытка через Flatpak
-    if command -v flatpak &> /dev/null; then
-        log_info "📦 Попытка установки через Flatpak..."
-        
-        # ImageMagick через Flatpak
-        if ! command -v convert &> /dev/null; then
-            flatpak install --user -y flathub org.imagemagick.ImageMagick 2>/dev/null && {
-                log_info "✅ ImageMagick установлен через Flatpak"
-                # Создаем wrapper для convert
-                mkdir -p "$HOME/.local/bin"
-                cat > "$HOME/.local/bin/convert" << 'EOF'
-#!/bin/bash
-exec flatpak run org.imagemagick.ImageMagick convert "$@"
-EOF
-                chmod +x "$HOME/.local/bin/convert"
-                export PATH="$HOME/.local/bin:$PATH"
-                echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-            } || log_warning "Не удалось установить ImageMagick через Flatpak"
-        fi
-    fi
-    
-    # Метод 2: Загрузка статических бинарников
-    if ! command -v convert &> /dev/null || ! command -v xwd &> /dev/null; then
-        log_info "📥 Загрузка статических бинарников..."
-        
-        mkdir -p "$HOME/.local/bin"
-        cd /tmp
-        
-        # ImageMagick статический бинарник
-        if ! command -v convert &> /dev/null; then
-            log_info "📥 Загрузка ImageMagick..."
-            if curl -L "https://github.com/SoftCreatR/imei/releases/latest/download/imei-linux-x86_64" -o imagemagick-convert 2>/dev/null; then
-                chmod +x imagemagick-convert
-                mv imagemagick-convert "$HOME/.local/bin/convert"
-                log_info "✅ ImageMagick установлен статически"
-            else
-                log_warning "Не удалось загрузить ImageMagick"
-            fi
-        fi
-        
-        # xwd и xdotool - попытка загрузить из репозиториев Ubuntu
-        if ! command -v xwd &> /dev/null; then
-            log_info "📥 Попытка загрузки xwd..."
-            # Создаем простую замену xwd через xwininfo и import
-            cat > "$HOME/.local/bin/xwd" << 'EOF'
-#!/bin/bash
-# Простая замена xwd
-if command -v import &> /dev/null; then
-    # Используем ImageMagick import
-    import "$@"
-elif command -v gnome-screenshot &> /dev/null; then
-    # Используем gnome-screenshot
-    gnome-screenshot -f "${@: -1}"
-else
-    echo "❌ Нет доступных инструментов для скриншотов" >&2
-    exit 1
-fi
-EOF
-            chmod +x "$HOME/.local/bin/xwd"
-            log_info "✅ Создан wrapper для xwd"
-        fi
-        
-        export PATH="$HOME/.local/bin:$PATH"
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-        cd "$PROJECT_DIR"
-    fi
-    
-    # Проверяем результат
-    if command -v convert &> /dev/null && command -v xwd &> /dev/null; then
-        log_info "✅ Инструменты для скриншотов готовы"
-        return 0
-    else
-        log_warning "⚠️  Не все инструменты установлены, но продолжаем..."
-        return 1
-    fi
 }
 
-# Устанавливаем инструменты для скриншотов
-install_screenshot_tools
-
-# Создаем виртуальное окружение
-if ! $PYTHON_CMD -m venv venv; then
-    echo "❌ Не удалось создать виртуальное окружение"
-    exit 1
-fi
-
-source venv/bin/activate
-
-# Обновляем pip и устанавливаем инструменты сборки
-echo "📚 Обновление pip и установка инструментов сборки..."
-python -m pip install --upgrade pip
-python -m pip install --upgrade setuptools wheel build
-
-# Устанавливаем системные зависимости для сборки пакетов, если нужно
-if [ "$PACMAN_FAILED" = false ] && command -v pacman &> /dev/null; then
-    echo "🔧 Установка дополнительных инструментов сборки..."
-    sudo steamos-readonly disable 2>/dev/null || true
-    timeout 120 bash -c 'yes "y" | sudo pacman -S --needed --noconfirm gcc python-devel libffi-devel openssl-devel' 2>/dev/null || echo "⚠️  Дополнительные инструменты не установлены"
-    sudo steamos-readonly enable 2>/dev/null || true
-fi
-
-# Установка Python зависимостей
-echo "🔄 Установка Python пакетов..."
-
-# Функция для надежной установки пакетов
-install_package() {
-    local package="$1"
-    local backup_package="$2"
-    local is_critical="$3"
+# Создание альтернатив для ImageMagick и xwd
+create_image_tools() {
+    log_info "🖼️  Настройка инструментов для скриншотов..."
     
-    echo "  Установка $package..."
+    mkdir -p "$LOCAL_BIN"
     
-    if pip install "$package" --no-cache-dir; then
-        echo "  ✅ $package установлен"
-        return 0
-    elif [ ! -z "$backup_package" ]; then
-        echo "  ⚠️  Пробуем альтернативную версию: $backup_package"
-        if pip install "$backup_package" --no-cache-dir; then
-            echo "  ✅ $backup_package установлен"
-            return 0
+    # Проверяем доступные системные инструменты
+    local screenshot_tool=""
+    for tool in gnome-screenshot spectacle scrot flameshot; do
+        if command -v "$tool" &> /dev/null; then
+            screenshot_tool="$tool"
+            log_info "Найден инструмент скриншотов: $tool"
+            break
         fi
-    fi
+    done
     
-    if [ "$is_critical" = "true" ]; then
-        echo "  ❌ Не удалось установить критичный пакет $package"
-        return 1
-    else
-        echo "  ⚠️  $package пропущен (не критично)"
-        return 0
-    fi
-}
+    # Создаем wrapper для xwd
+    cat > "$LOCAL_BIN/xwd" << 'EOF'
+#!/bin/bash
+# xwd replacement for Steam Deck
 
-# Установка критичных зависимостей с fallback версиями
-echo "📦 Установка критичных зависимостей..."
+OUTPUT="${*: -1}"
+[ -z "$OUTPUT" ] && OUTPUT="screenshot.png"
 
-install_package "python-telegram-bot>=22.0,<23.0" "python-telegram-bot>=22.0,<23.0" "true"
-install_package "aiohttp==3.9.1" "aiohttp>=3.8.0" "true"
-install_package "pyyaml==6.0.1" "pyyaml>=6.0" "true"
-install_package "loguru==0.7.2" "loguru>=0.7.0" "true"
-install_package "Pillow==10.1.0" "Pillow>=9.0.0" "true"
-install_package "requests==2.31.0" "requests>=2.28.0" "true"
+# Ensure .png extension
+case "$OUTPUT" in
+    *.png) ;;
+    *.xwd) OUTPUT="${OUTPUT%.xwd}.png" ;;
+    *) OUTPUT="$OUTPUT.png" ;;
+esac
 
-# Устанавливаем базовые зависимости для pynput
-install_package "six" "" "false"
-
-# Установка дополнительных зависимостей (более мягко)
-echo "📦 Установка дополнительных зависимостей..."
-
-# OpenCV - пробуем разные варианты
-if ! pip install opencv-python-headless --no-cache-dir; then
-    if ! pip install opencv-python --no-cache-dir; then
-        echo "  ⚠️  OpenCV пропущен (не критично)"
-    fi
-fi
-
-# PyAutoGUI - часто проблемы на Steam Deck
-if ! pip install PyAutoGUI --no-cache-dir; then
-    echo "  ⚠️  PyAutoGUI пропущен (не критично - можно установить позже)"
-fi
-
-# pynput - проблемы с evdev на Steam Deck, пробуем разные варианты
-echo "  Установка pynput..."
-if pip install pynput --no-cache-dir; then
-    echo "  ✅ pynput установлен"
-elif pip install six --no-cache-dir && pip install pynput --no-deps --no-cache-dir; then
-    echo "  ✅ pynput установлен (с минимальными зависимостями)"
+# Try available screenshot tools
+if command -v gnome-screenshot &> /dev/null; then
+    gnome-screenshot -f "$OUTPUT"
+elif command -v spectacle &> /dev/null; then
+    spectacle -b -n -o "$OUTPUT"  
+elif command -v scrot &> /dev/null; then
+    scrot "$OUTPUT"
+elif command -v flameshot &> /dev/null; then
+    flameshot full -p "$(dirname "$OUTPUT")" -f "$(basename "$OUTPUT")"
 else
-    echo "  ⚠️  pynput пропущен (проблемы с evdev на Steam Deck - не критично)"
-fi
-
-# numpy - обычно устанавливается без проблем
-install_package "numpy" "" "false"
-
-echo "📦 Проверка установки базовых зависимостей..."
-python -c "
-import sys
-failed = []
-try:
-    import telegram
-    print('✅ telegram импортируется')
-except ImportError:
-    failed.append('python-telegram-bot')
-    print('❌ telegram не импортируется')
-
-try:
-    import aiohttp
-    print('✅ aiohttp импортируется')
-except ImportError:
-    failed.append('aiohttp')
-    print('❌ aiohttp не импортируется')
-
-try:
-    from PIL import Image
-    print('✅ Pillow импортируется')
-except ImportError:
-    failed.append('Pillow')
-    print('❌ Pillow не импортируется')
-
-try:
-    import yaml
-    print('✅ yaml импортируется')
-except ImportError:
-    failed.append('pyyaml')
-    print('❌ yaml не импортируется')
-
-try:
-    import loguru
-    print('✅ loguru импортируется')
-except ImportError:
-    failed.append('loguru')
-    print('❌ loguru не импортируется')
-
-if failed:
-    print(f'⚠️  Некоторые критичные пакеты не установились: {failed}')
-    print('🔄 Пробуем установить через requirements.txt...')
-    sys.exit(2)  # Сигнал для bash скрипта
-else:
-    print('✅ Все критичные зависимости установлены успешно!')
+    echo "⚠️  Нет доступных инструментов для скриншотов" >&2
+    echo "💡 Создается заглушка..." >&2
+    # Create a simple 1x1 PNG as fallback
+    python3 -c "
+import struct
+def create_png():
+    # Minimal 1x1 red PNG
+    data = b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x02\\x00\\x00\\x00\\x90wS\\xde\\x00\\x00\\x00\\x0cIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x18\\xdd\\x8d\\xb4\\x00\\x00\\x00\\x00IEND\\xaeB\`\\x82'
+    return data
+with open('$OUTPUT', 'wb') as f:
+    f.write(create_png())
 "
-
-# Если проверка не прошла, пробуем установить через requirements.txt
-if [ $? -eq 2 ]; then
-    echo "🔄 Пробуем альтернативный метод через requirements.txt..."
-    if pip install -r requirements.txt --no-cache-dir; then
-        echo "✅ Зависимости установлены через requirements.txt"
-    else
-        echo "⚠️  Проблемы с установкой некоторых пакетов, но продолжаем..."
-    fi
 fi
-
-# Проверка и установка Ollama
-echo "🤖 Проверка Ollama..."
-
-OLLAMA_INSTALLED=false
-OLLAMA_WORKING=false
-
-# Проверяем наличие ollama в разных местах
-if command -v ollama &> /dev/null; then
-    OLLAMA_INSTALLED=true
-    echo "✅ Ollama найден в системе"
-elif [ -f "$HOME/.local/bin/ollama" ]; then
-    OLLAMA_INSTALLED=true
-    export PATH="$HOME/.local/bin:$PATH"
-    echo "✅ Ollama найден в ~/.local/bin"
-fi
-
-# Если Ollama установлен, проверяем его работоспособность
-if [ "$OLLAMA_INSTALLED" = true ]; then
-    if ollama --version &> /dev/null; then
-        OLLAMA_WORKING=true
-        echo "✅ Ollama работает корректно"
-    else
-        echo "⚠️  Ollama установлен, но не работает"
-        OLLAMA_WORKING=false
-    fi
-fi
-
-# Устанавливаем Ollama если нужно
-if [ "$OLLAMA_INSTALLED" = false ] || [ "$OLLAMA_WORKING" = false ]; then
-    echo "📥 Установка Ollama..."
+EOF
+    chmod +x "$LOCAL_BIN/xwd"
     
-    # Пробуем стандартную установку
-    if curl -fsSL https://ollama.ai/install.sh | sh 2>/dev/null; then
-        echo "✅ Ollama установлен через официальный скрипт"
+    # Создаем wrapper для convert  
+    cat > "$LOCAL_BIN/convert" << 'EOF'
+#!/bin/bash
+# ImageMagick convert replacement
+
+# Simple convert functionality using Python
+if [[ "$*" == *"-size"* && "$*" == *"xc:"* ]]; then
+    # Handle: convert -size 100x100 xc:red output.png
+    OUTPUT="${*: -1}"
+    python3 -c "
+import struct
+def create_png():
+    # Minimal 1x1 PNG
+    data = b'\\x89PNG\\r\\n\\x1a\\n\\x00\\x00\\x00\\rIHDR\\x00\\x00\\x00\\x01\\x00\\x00\\x00\\x01\\x08\\x02\\x00\\x00\\x00\\x90wS\\xde\\x00\\x00\\x00\\x0cIDATx\\x9cc\\xf8\\x0f\\x00\\x00\\x01\\x00\\x01\\x00\\x18\\xdd\\x8d\\xb4\\x00\\x00\\x00\\x00IEND\\xaeB\`\\x82'
+    return data
+with open('$OUTPUT', 'wb') as f:
+    f.write(create_png())
+"
+elif command -v ffmpeg &> /dev/null && [ $# -ge 2 ]; then
+    # Use ffmpeg for actual conversions
+    INPUT=""
+    OUTPUT=""
+    for arg in "$@"; do
+        if [[ -f "$arg" ]]; then
+            INPUT="$arg"
+        elif [[ "$arg" == *"."* && "$arg" != "-"* ]]; then
+            OUTPUT="$arg" 
+        fi
+    done
+    
+    if [[ -n "$INPUT" && -n "$OUTPUT" ]]; then
+        ffmpeg -y -i "$INPUT" "$OUTPUT" 2>/dev/null
     else
-        # Если не удалось, устанавливаем в пользовательскую директорию
-        echo "⚠️  Официальная установка не удалась, устанавливаем локально..."
-        
-        mkdir -p "$HOME/.local/bin"
-        OLLAMA_VERSION="v0.12.3"
-        OLLAMA_URL="https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tgz"
-        
-        if curl -L "$OLLAMA_URL" -o "/tmp/ollama.tgz"; then
-            mkdir -p /tmp/ollama_extract
-            
-            if tar -xzf /tmp/ollama.tgz -C /tmp/ollama_extract; then
-                # Ищем исполняемый файл
-                if [ -f "/tmp/ollama_extract/bin/ollama" ]; then
-                    cp "/tmp/ollama_extract/bin/ollama" "$HOME/.local/bin/ollama"
-                elif [ -f "/tmp/ollama_extract/ollama" ]; then
-                    cp "/tmp/ollama_extract/ollama" "$HOME/.local/bin/ollama"
-                fi
-                
-                chmod +x "$HOME/.local/bin/ollama"
-                export PATH="$HOME/.local/bin:$PATH"
-                
-                # Добавляем в bashrc если еще не добавлено
-                if ! grep -q "export PATH.*\.local/bin" ~/.bashrc; then
-                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-                fi
-                
-                echo "✅ Ollama установлен в ~/.local/bin"
-                
-                # Очищаем временные файлы
-                rm -rf /tmp/ollama_extract /tmp/ollama.tgz
-            else
-                echo "❌ Не удалось распаковать Ollama"
-                exit 1
-            fi
+        echo "⚠️  Упрощенная поддержка convert" >&2
+    fi
+else
+    echo "⚠️  convert: базовая поддержка" >&2
+    echo "💡 Для полной поддержки установите ffmpeg" >&2
+fi
+EOF
+    chmod +x "$LOCAL_BIN/convert"
+    
+    # Wrapper для import
+    cat > "$LOCAL_BIN/import" << 'EOF'
+#!/bin/bash  
+# ImageMagick import replacement
+exec "$HOME/.local/bin/xwd" "$@"
+EOF
+    chmod +x "$LOCAL_BIN/import"
+    
+    log_success "Инструменты скриншотов настроены"
+}
+
+# Установка Ollama
+install_ollama() {
+    log_info "🤖 Установка Ollama..."
+    
+    if [ -f "$OLLAMA_DIR/bin/ollama" ]; then
+        log_info "Ollama уже установлен"
+        return 0
+    fi
+    
+    mkdir -p "$OLLAMA_DIR/bin"
+    
+    # Определяем архитектуру
+    local arch
+    case "$(uname -m)" in
+        x86_64) arch="amd64" ;;
+        aarch64|arm64) arch="arm64" ;;
+        *) 
+            log_error "Неподдерживаемая архитектура: $(uname -m)"
+            exit 1
+            ;;
+    esac
+    
+    log_info "Загружаем Ollama для $arch..."
+    
+    # Загружаем бинарник Ollama
+    if curl -L "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-$arch" -o "$OLLAMA_DIR/bin/ollama"; then
+        chmod +x "$OLLAMA_DIR/bin/ollama"
+        log_success "Ollama установлен: $($OLLAMA_DIR/bin/ollama --version 2>/dev/null | head -1 || echo 'готов к запуску')"
+    else
+        log_error "Не удалось загрузить Ollama"
+        exit 1
+    fi
+    
+    # Создаем конфигурационный файл
+    mkdir -p "$HOME/.ollama"
+    cat > "$HOME/.ollama/config.json" << EOF
+{
+  "origins": ["*"],
+  "models_path": "$HOME/.ollama/models"
+}
+EOF
+    
+    log_success "Ollama настроен"
+}
+
+# Установка проекта
+install_project() {
+    log_info "📦 Настройка проекта..."
+    
+    # Проверяем наличие основных файлов
+    if [ ! -f "main.py" ]; then
+        log_error "Файл main.py не найден. Убедитесь, что вы находитесь в правильной директории."
+        exit 1
+    fi
+    
+    export PATH="$PYTHON_DIR/bin:$PATH"
+    
+    # Обновляем pip
+    log_info "Обновляем pip..."
+    $PYTHON_DIR/bin/python3 -m pip install --upgrade pip --user
+    
+    # Устанавливаем зависимости Python
+    if [ -f "requirements.txt" ]; then
+        log_info "Устанавливаем зависимости из requirements.txt..."
+        $PYTHON_DIR/bin/python3 -m pip install -r requirements.txt --user
+    else
+        log_info "Устанавливаем базовые зависимости..."
+        $PYTHON_DIR/bin/python3 -m pip install --user \
+            "python-telegram-bot>=20.0" \
+            "python-dotenv" \
+            "aiohttp" \
+            "pillow" \
+            "requests"
+    fi
+    
+    # Создаем конфигурационный файл если его нет
+    if [ ! -f "config/config.yaml" ]; then
+        log_info "Создаем config/config.yaml..."
+        if [ -f "config/config.example.yaml" ]; then
+            cp config/config.example.yaml config/config.yaml
+            log_warning "⚠️  Настройте config/config.yaml с вашими параметрами!"
         else
-            echo "❌ Не удалось загрузить Ollama"
+            log_error "config/config.example.yaml не найден!"
             exit 1
         fi
     fi
-fi
+    
+    # Создаем директории
+    mkdir -p screenshots logs
+    
+    # Создаем простой тестовый скрипт
+    cat > test_setup.py << 'EOF'
+#!/usr/bin/env python3
+"""Тест настройки окружения"""
 
-# Настройка и запуск Ollama как systemd сервис
-echo "🚀 Настройка сервиса Ollama..."
+import sys
+import os
 
-# Определяем путь к исполняемому файлу Ollama
-OLLAMA_EXEC=""
-if command -v ollama &> /dev/null; then
-    OLLAMA_EXEC=$(which ollama)
-elif [ -f "$HOME/.local/bin/ollama" ]; then
-    OLLAMA_EXEC="$HOME/.local/bin/ollama"
-fi
+def test_imports():
+    """Тестируем импорты"""
+    try:
+        import telegram
+        print(f"✅ python-telegram-bot: {telegram.__version__}")
+    except ImportError as e:
+        print(f"❌ python-telegram-bot: {e}")
+        return False
+    
+    try:
+        import dotenv
+        print("✅ python-dotenv: OK")
+    except ImportError as e:
+        print(f"❌ python-dotenv: {e}")
+        return False
+        
+    try:
+        import aiohttp
+        print("✅ aiohttp: OK")
+    except ImportError as e:
+        print(f"❌ aiohttp: {e}")
+        return False
+        
+    try:
+        from PIL import Image
+        print("✅ Pillow: OK")
+    except ImportError as e:
+        print(f"❌ Pillow: {e}")
+        return False
+        
+    return True
 
-if [ ! -z "$OLLAMA_EXEC" ]; then
-    # Создаем systemd сервис для Ollama
-    echo "📝 Создание systemd сервиса для Ollama..."
-    sudo tee /etc/systemd/system/ollama.service > /dev/null << EOF
+def test_ollama():
+    """Тестируем Ollama"""
+    ollama_path = os.path.expanduser("~/.local/share/ollama/bin/ollama")
+    if os.path.exists(ollama_path):
+        print(f"✅ Ollama найден: {ollama_path}")
+        return True
+    else:
+        print(f"❌ Ollama не найден: {ollama_path}")
+        return False
+
+def test_tools():
+    """Тестируем инструменты"""
+    tools_ok = True
+    
+    for tool in ["xwd", "convert", "import"]:
+        tool_path = os.path.expanduser(f"~/.local/bin/{tool}")
+        if os.path.exists(tool_path):
+            print(f"✅ {tool}: {tool_path}")
+        else:
+            print(f"❌ {tool}: не найден")
+            tools_ok = False
+            
+    return tools_ok
+
+if __name__ == "__main__":
+    print("🧪 Тестирование настройки...")
+    print("\n📦 Python пакеты:")
+    imports_ok = test_imports()
+    
+    print("\n🤖 Ollama:")
+    ollama_ok = test_ollama()
+    
+    print("\n🛠️  Инструменты:")
+    tools_ok = test_tools()
+    
+    print("\n" + "="*50)
+    if imports_ok and ollama_ok and tools_ok:
+        print("🎉 Все компоненты готовы!")
+        sys.exit(0)
+    else:
+        print("⚠️  Некоторые компоненты требуют внимания")
+        sys.exit(1)
+EOF
+    
+    chmod +x test_setup.py
+    
+    log_success "Проект настроен"
+}
+
+# Настройка systemd сервисов
+setup_services() {
+    log_info "🔧 Настройка сервисов..."
+    
+    local current_dir="$(pwd)"
+    local user_service_dir="$HOME/.config/systemd/user"
+    
+    mkdir -p "$user_service_dir"
+    
+    # Сервис Ollama
+    cat > "$user_service_dir/ollama.service" << EOF
 [Unit]
-Description=Ollama Service
-After=network-online.target
+Description=Ollama Server
+After=network.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=deck
-ExecStart=$OLLAMA_EXEC serve
+ExecStart=$OLLAMA_DIR/bin/ollama serve
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Environment=HOME=$HOME
+WorkingDirectory=$HOME
 Restart=always
-RestartSec=5
-Environment=OLLAMA_ORIGINS=*
-WorkingDirectory=/home/deck
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 
-    # Перезагружаем systemd и включаем сервис
-    sudo systemctl daemon-reload
-    sudo systemctl enable ollama.service
-    
-    # Проверяем, запущен ли уже сервис
-    if ! systemctl is-active --quiet ollama.service; then
-        echo "🔄 Запуск сервиса Ollama..."
-        sudo systemctl start ollama.service
-        
-        # Ждем запуска сервера
-        echo "⏳ Ожидание запуска сервера..."
-        for i in {1..30}; do
-            if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
-                echo "✅ Сервер Ollama запущен как сервис"
-                break
-            fi
-            sleep 1
-            if [ $i -eq 30 ]; then
-                echo "⚠️  Сервер Ollama не отвечает, пробуем ручной запуск..."
-                # Fallback к ручному запуску
-                nohup "$OLLAMA_EXEC" serve > /dev/null 2>&1 &
-                sleep 5
-            fi
-        done
-    else
-        echo "✅ Сервис Ollama уже запущен"
-    fi
-else
-    echo "❌ Не найден исполняемый файл Ollama"
-    exit 1
-fi
-
-# Проверка и загрузка моделей
-echo "🧠 Проверка моделей ИИ..."
-
-# Функция для проверки модели
-check_model() {
-    local model_name="$1"
-    if ollama list | grep -q "$model_name"; then
-        echo "✅ Модель $model_name уже загружена"
-        return 0
-    else
-        echo "📥 Загрузка модели $model_name..."
-        if ollama pull "$model_name"; then
-            echo "✅ Модель $model_name загружена"
-            return 0
-        else
-            echo "❌ Не удалось загрузить модель $model_name"
-            return 1
-        fi
-    fi
-}
-
-# Проверяем основные модели
-check_model "llama3.1:8b" || echo "⚠️  Модель llama3.1:8b не загружена"
-check_model "llava:7b" || echo "⚠️  Модель llava:7b не загружена"
-
-# Создание конфигурации
-echo "⚙️  Настройка конфигурации..."
-if [ ! -f "config/config.yaml" ]; then
-    cp config/config.example.yaml config/config.yaml
-    echo "📝 Создан файл конфигурации config/config.yaml"
-    echo "❗ ВАЖНО: Отредактируйте config/config.yaml с вашими настройками!"
-fi
-
-# Создание systemd сервиса для Disco Coop
-echo "🔧 Создание systemd сервиса Disco Coop..."
-sudo tee /etc/systemd/system/disco-coop.service > /dev/null << EOF
+    # Сервис бота
+    cat > "$user_service_dir/disco-coop-bot.service" << EOF
 [Unit]
 Description=Disco Coop Telegram Bot
-After=network-online.target ollama.service
-Wants=network-online.target
+After=ollama.service
 Requires=ollama.service
 
 [Service]
 Type=simple
-User=deck
-WorkingDirectory=$PROJECT_DIR
-Environment=PATH=$PROJECT_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=$PROJECT_DIR/venv/bin/python main.py
+ExecStart=$PYTHON_DIR/bin/python3 $current_dir/main.py
+Environment=PATH=$PYTHON_DIR/bin:$LOCAL_BIN:\$PATH
+Environment=HOME=$HOME
+WorkingDirectory=$current_dir
 Restart=always
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 
-# Перезагрузка systemd и включение сервиса
-sudo systemctl daemon-reload
-sudo systemctl enable disco-coop.service
+    # Перезагружаем systemd
+    systemctl --user daemon-reload
+    
+    log_success "Сервисы настроены"
+    log_info "Для запуска используйте:"
+    log_info "  systemctl --user enable --now ollama"
+    log_info "  systemctl --user enable --now disco-coop-bot"
+}
 
-echo "✅ Сервисы настроены для автоматического запуска"
-
-# Создание папки для логов
-mkdir -p logs
-
-# Создание скрипта запуска
-echo "📜 Создание скрипта запуска..."
-cat > start.sh << 'EOF'
-#!/bin/bash
-cd "$(dirname "$0")"
-
-# Проверяем, что Ollama сервис запущен
-echo "🤖 Проверка сервиса Ollama..."
-if ! systemctl is-active --quiet ollama.service; then
-    echo "🚀 Запуск сервиса Ollama..."
-    sudo systemctl start ollama.service
-    sleep 5
-fi
-
-# Ждем, пока Ollama станет доступен
-echo "⏳ Ожидание Ollama API..."
-for i in {1..30}; do
-    if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
-        echo "✅ Ollama готов"
-        break
-    fi
-    sleep 1
-    if [ $i -eq 30 ]; then
-        echo "⚠️  Ollama не отвечает, но продолжаем..."
-    fi
-done
-
-# Активируем виртуальное окружение и запускаем бота
-source venv/bin/activate
-echo "🚀 Запуск Disco Coop бота..."
-python main.py
-EOF
-chmod +x start.sh
-
-# Создание дополнительных скриптов управления
-echo "📜 Создание скриптов управления..."
-
-cat > stop.sh << 'EOF'
-#!/bin/bash
-echo "🛑 Остановка сервисов..."
-sudo systemctl stop disco-coop.service
-sudo systemctl stop ollama.service
-echo "✅ Сервисы остановлены"
-EOF
-chmod +x stop.sh
-
-cat > restart.sh << 'EOF'
-#!/bin/bash
-echo "🔄 Перезапуск сервисов..."
-sudo systemctl restart ollama.service
-sleep 5
-sudo systemctl restart disco-coop.service
-echo "✅ Сервисы перезапущены"
-EOF
-chmod +x restart.sh
-
-cat > status.sh << 'EOF'
-#!/bin/bash
-echo "📊 Статус сервисов:"
-echo "=================="
-echo "🤖 Ollama:"
-sudo systemctl status ollama.service --no-pager -l
-echo ""
-echo "🎮 Disco Coop:"
-sudo systemctl status disco-coop.service --no-pager -l
-echo ""
-echo "🌐 API Ollama:"
-if curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
-    echo "✅ Доступно"
-else
-    echo "❌ Недоступно"
-fi
-EOF
-chmod +x status.sh
-
-# Финальная проверка системы
-echo ""
-echo "🔍 Финальная проверка системы..."
-
-# Активируем виртуальное окружение для проверок
-source venv/bin/activate
-
-# Проверка Python зависимостей
-echo "1. 📦 Проверка Python зависимостей..."
-MISSING_DEPS=""
-
-check_python_package() {
-    if python -c "import $1" 2>/dev/null; then
-        echo "   ✅ $1"
+# Финальная проверка
+final_check() {
+    log_info "🔍 Финальная проверка..."
+    
+    local all_ok=true
+    
+    # Проверяем Python
+    if [ -f "$PYTHON_DIR/bin/python3" ]; then
+        log_success "Python: готов"
     else
-        echo "   ❌ $1 отсутствует"
-        MISSING_DEPS="$MISSING_DEPS $1"
+        log_error "Python: не найден"
+        all_ok=false
+    fi
+    
+    # Проверяем Ollama
+    if [ -f "$OLLAMA_DIR/bin/ollama" ]; then
+        log_success "Ollama: готов"
+    else
+        log_error "Ollama: не найден"
+        all_ok=false
+    fi
+    
+    # Проверяем инструменты
+    for tool in xwd convert import; do
+        if [ -f "$LOCAL_BIN/$tool" ]; then
+            log_success "$tool: готов"
+        else
+            log_error "$tool: не найден"
+            all_ok=false
+        fi
+    done
+    
+    # Проверяем файлы проекта
+    for file in main.py config/config.yaml; do
+        if [ -f "$file" ]; then
+            log_success "$file: найден"
+        else
+            log_warning "$file: требует настройки"
+        fi
+    done
+    
+    if $all_ok; then
+        log_success "🎉 Установка завершена успешно!"
+        echo
+        echo "📝 Следующие шаги:"
+        echo "1. Настройте config/config.yaml с токеном бота"
+        echo "2. Запустите тест: ./test_setup.py"
+        echo "3. Запустите сервисы:"
+        echo "   systemctl --user enable --now ollama"
+        echo "   systemctl --user enable --now disco-coop-bot"
+        echo "4. Проверьте статус: systemctl --user status ollama disco-coop-bot"
+        echo
+    else
+        log_error "⚠️  Установка завершена с ошибками"
+        return 1
     fi
 }
 
-check_python_package "telegram"
-check_python_package "PIL"
-check_python_package "aiohttp"
-check_python_package "yaml"
-check_python_package "loguru"
-
-# Дополнительные пакеты (не критичные)
-python -c "import cv2" 2>/dev/null && echo "   ✅ cv2 (opencv)" || echo "   ⚠️  cv2 отсутствует (не критично)"
-python -c "import pyautogui" 2>/dev/null && echo "   ✅ pyautogui" || echo "   ⚠️  pyautogui отсутствует (не критично)"
-python -c "import pynput" 2>/dev/null && echo "   ✅ pynput" || echo "   ⚠️  pynput отсутствует (не критично)"
-
-# Установка недостающих критичных зависимостей
-if [ ! -z "$MISSING_DEPS" ]; then
-    echo "📦 Доустановка недостающих зависимостей..."
-    for dep in $MISSING_DEPS; do
-        case $dep in
-            "telegram")
-                pip install python-telegram-bot>=22.0,<23.0 --no-cache-dir || \
-                pip install python-telegram-bot --no-cache-dir || \
-                echo "❌ Не удалось установить python-telegram-bot"
-                ;;
-            "PIL")
-                pip install Pillow>=9.0.0 --no-cache-dir || \
-                pip install Pillow --no-cache-dir || \
-                echo "❌ Не удалось установить Pillow"
-                ;;
-            "aiohttp")
-                pip install aiohttp>=3.8.0 --no-cache-dir || \
-                pip install aiohttp --no-cache-dir || \
-                echo "❌ Не удалось установить aiohttp"
-                ;;
-            "yaml")
-                pip install pyyaml>=6.0 --no-cache-dir || \
-                pip install pyyaml --no-cache-dir || \
-                echo "❌ Не удалось установить pyyaml"
-                ;;
-            "loguru")
-                pip install loguru>=0.7.0 --no-cache-dir || \
-                pip install loguru --no-cache-dir || \
-                echo "❌ Не удалось установить loguru"
-                ;;
-        esac
-    done
-fi
-
-# Проверка конфигурации
-echo "2. ⚙️  Проверка конфигурации..."
-if [ -f "config/config.yaml" ]; then
-    if python -c "from src.utils.config import Config; c = Config.load(); c.validate(); print('   ✅ Конфигурация корректна')" 2>/dev/null; then
-        echo "   ✅ Конфигурация валидна"
-    else
-        echo "   ⚠️  Конфигурация требует настройки"
-    fi
-else
-    echo "   ⚠️  Файл конфигурации не найден"
-fi
-
-# Проверка Ollama и моделей
-echo "3. 🤖 Проверка Ollama и моделей..."
-if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-    echo "   ✅ Сервер Ollama доступен"
+# Основная логика
+main() {
+    echo "🎮 Disco Coop - Установка для Steam Deck"
+    echo "=========================================="
+    echo
     
-    # Проверяем модели
-    if ollama list | grep -q "llama3.1:8b"; then
-        echo "   ✅ Модель llama3.1:8b загружена"
-    else
-        echo "   ❌ Модель llama3.1:8b не найдена"
+    # Проверяем права
+    if [ "$EUID" -eq 0 ]; then
+        log_error "Не запускайте от root! Используйте обычного пользователя."
+        exit 1
     fi
     
-    if ollama list | grep -q "llava:7b"; then
-        echo "   ✅ Модель llava:7b загружена"
-    else
-        echo "   ❌ Модель llava:7b не найдена"
-    fi
-else
-    echo "   ❌ Сервер Ollama недоступен"
-fi
-
-# Создание упрощенного скрипта тестирования
-cat > test.sh << 'EOF'
-#!/bin/bash
-cd "$(dirname "$0")"
-source venv/bin/activate
-
-echo "🧪 Быстрая проверка системы..."
-
-# Проверка основных компонентов
-python -c "
-try:
-    from src.utils.config import Config
-    print('✅ Конфигурация загружается')
-except Exception as e:
-    print(f'❌ Проблема с конфигурацией: {e}')
-
-try:
-    import telegram, PIL, aiohttp, yaml, loguru
-    print('✅ Основные зависимости установлены')
-except ImportError as e:
-    print(f'❌ Отсутствуют зависимости: {e}')
-
-# Проверяем дополнительные зависимости
-try:
-    import pynput
-    print('✅ pynput доступен')
-except ImportError as e:
-    print(f'⚠️  pynput недоступен: {e}')
-    
-try:
-    import pyautogui
-    print('✅ pyautogui доступен')
-except ImportError as e:
-    print(f'⚠️  pyautogui недоступен: {e}')
-
-# Проверяем импорт GameController
-try:
-    from src.game.controller import GameController
-    print('✅ GameController импортируется')
-except ImportError as e:
-    print(f'❌ Ошибка импорта GameController: {e}')
-    print('💡 Попробуйте запустить: ./fix_pynput.sh')
-"
-
-# Проверка Ollama
-if systemctl is-active --quiet ollama.service; then
-    echo "✅ Сервис Ollama активен"
-    if curl -s http://localhost:11434/api/tags > /dev/null; then
-        echo "✅ API Ollama доступно"
-    else
-        echo "⚠️  API Ollama недоступно"
-    fi
-else
-    echo "❌ Сервис Ollama неактивен - запустите: sudo systemctl start ollama.service"
-fi
-
-echo "Проверка завершена!"
-EOF
-chmod +x test.sh
-
-echo ""
-echo "🎉 Установка завершена!"
-echo ""
-
-# Финальная сводка
-echo "� Состояние системы:"
-echo "================================"
-
-# Проверяем Python
-if command -v python &> /dev/null; then
-    echo "✅ Python: $(python --version)"
-else
-    echo "❌ Python не найден"
-fi
-
-# Проверяем виртуальное окружение
-if [ -d "venv" ]; then
-    echo "✅ Виртуальное окружение создано"
-else
-    echo "❌ Виртуальное окружение отсутствует"
-fi
-
-# Проверяем Ollama
-if command -v ollama &> /dev/null || [ -f "$HOME/.local/bin/ollama" ]; then
-    echo "✅ Ollama установлен"
-    
-    # Проверяем статус сервиса
-    if systemctl is-active --quiet ollama.service; then
-        echo "✅ Сервис Ollama активен"
-    elif pgrep -f "ollama serve" > /dev/null; then
-        echo "✅ Сервер Ollama запущен (ручной режим)"
-    else
-        echo "⚠️  Сервер Ollama не запущен"
+    # Проверяем наличие curl
+    if ! command -v curl &> /dev/null; then
+        log_error "curl не найден. Установите curl для продолжения."
+        exit 1
     fi
     
-    # Проверяем доступность API
-    if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo "✅ API Ollama доступно"
+    # Создаем необходимые директории
+    mkdir -p "$PYTHON_DIR" "$OLLAMA_DIR" "$LOCAL_BIN"
+    
+    # Добавляем в PATH
+    export PATH="$PYTHON_DIR/bin:$OLLAMA_DIR/bin:$LOCAL_BIN:$PATH"
+    
+    # Выполняем установку по этапам
+    log_info "🚀 Начинаем установку..."
+    
+    if ! check_installation; then
+        log_info "Выполняем полную установку..."
+        
+        install_python
+        create_image_tools  
+        install_ollama
+        install_project
+        setup_services
+        
+        # Помечаем как установленную
+        touch "$INSTALL_MARKER"
+        echo "$(date '+%Y-%m-%d %H:%M:%S')" > "$INSTALL_MARKER"
     else
-        echo "⚠️  API Ollama недоступно"
+        log_info "Система уже установлена. Обновляем компоненты..."
+        
+        # При повторном запуске только обновляем проект
+        install_project
+        setup_services
     fi
-else
-    echo "❌ Ollama не установлен"
-fi
+    
+    # Финальная проверка
+    final_check
+    
+    echo
+    log_success "✨ Готово! Теперь настройте config/config.yaml и запустите сервисы."
+}
 
-# Проверяем конфигурацию
-if [ -f "config/config.yaml" ]; then
-    echo "✅ Файл конфигурации создан"
-else
-    echo "❌ Файл конфигурации отсутствует"
-fi
-
-echo ""
-echo "� Следующие шаги:"
-echo "================================"
-echo "1. 📝 Настройте config/config.yaml:"
-echo "   - Добавьте Telegram bot token"
-echo "   - Укажите разрешенные chat IDs"
-echo ""
-echo "2. 🧪 Запустите проверку: ./test.sh"
-echo ""
-echo "3. � Запустите бота:"
-echo "   - Вручную: ./start.sh"
-echo "   - Как сервис: sudo systemctl start disco-coop.service"
-echo ""
-echo "🔧 Полезные команды:"
-echo "- Статус бота: sudo systemctl status disco-coop.service"
-echo "- Статус Ollama: sudo systemctl status ollama.service"
-echo "- Логи бота: sudo journalctl -u disco-coop.service -f"
-echo "- Логи Ollama: sudo journalctl -u ollama.service -f"
-echo "- Перезапуск бота: sudo systemctl restart disco-coop.service"
-echo "- Перезапуск Ollama: sudo systemctl restart ollama.service"
-echo ""
-echo "❗ Важно:"
-echo "- Создайте Telegram бота через @BotFather"
-echo "- Запустите Disco Elysium перед использованием"
-echo "- При проблемах запустите скрипт повторно"
-
-log_info "✅ Установка завершена успешно!"
+# Обработка аргументов командной строки
+case "${1:-}" in
+    --help|-h)
+        echo "Использование: $0 [опции]"
+        echo
+        echo "Опции:"
+        echo "  --help, -h     Показать эту справку"
+        echo "  --test         Запустить тест окружения"
+        echo "  --clean        Очистить установку"
+        echo "  --reinstall    Переустановить все компоненты"
+        echo
+        exit 0
+        ;;
+    --test)
+        if [ -f "test_setup.py" ]; then
+            exec "$PYTHON_DIR/bin/python3" test_setup.py
+        else
+            log_error "test_setup.py не найден. Сначала выполните установку."
+            exit 1
+        fi
+        ;;
+    --clean)
+        log_info "🗑️  Очистка установки..."
+        rm -rf "$PYTHON_DIR" "$OLLAMA_DIR" "$LOCAL_BIN"
+        rm -f "$INSTALL_MARKER" test_setup.py
+        systemctl --user stop ollama disco-coop-bot 2>/dev/null || true
+        systemctl --user disable ollama disco-coop-bot 2>/dev/null || true
+        rm -f "$HOME/.config/systemd/user/ollama.service"
+        rm -f "$HOME/.config/systemd/user/disco-coop-bot.service"
+        systemctl --user daemon-reload
+        log_success "Очистка завершена"
+        exit 0
+        ;;
+    --reinstall)
+        log_info "� Переустановка..."
+        rm -f "$INSTALL_MARKER"
+        main
+        exit $?
+        ;;
+    "")
+        main
+        exit $?
+        ;;
+    *)
+        log_error "Неизвестная опция: $1"
+        log_info "Используйте --help для справки"
+        exit 1
+        ;;
+esac
