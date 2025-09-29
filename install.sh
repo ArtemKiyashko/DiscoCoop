@@ -7,7 +7,6 @@ set -e  # Остановка при ошибках
 
 # Переменные
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INSTALL_DIR="$HOME/disco-coop"
 PYTHON_DIR="$HOME/python"
 OLLAMA_DIR="$HOME/.local/share/ollama"
 LOCAL_BIN="$HOME/.local/bin"
@@ -29,65 +28,39 @@ log_error() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ❌ $1" >&2
 }
 
-# Скачивание шаблонов для удаленной установки
-download_templates() {
-    log_info "📥 Скачивание шаблонов..."
+# Скачивание проекта с GitHub
+download_project() {
+    log_info "📥 Скачивание проекта DiscoCoop..."
     
-    local base_url="https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/templates"
-    local templates=(
-        "ollama.service"
-        "disco-coop-bot.service" 
-        "ollama-config.json"
-        "xwd-wrapper.sh"
-        "convert-wrapper.sh"
-        "import-wrapper.sh"
-        "test_setup.py"
-    )
-    
-    mkdir -p templates
-    
-    for template in "${templates[@]}"; do
-        if curl -fsSL "$base_url/$template" -o "templates/$template"; then
-            log_info "✅ Скачан: $template"
-        else
-            log_warning "⚠️  Не удалось скачать: $template"
-        fi
-    done
-    
-    # Делаем скрипты исполняемыми
-    chmod +x templates/*.sh templates/test_setup.py 2>/dev/null || true
-    
-    log_success "Шаблоны скачаны"
-}
-
-# Очистка временных шаблонов
-cleanup_templates() {
-    if [ "$SCRIPT_DIR" != "$(pwd)" ]; then
-        # Удаляем только если мы не в исходной директории проекта
-        rm -rf templates
-        log_info "Временные шаблоны удалены"
+    # Проверяем есть ли уже проект
+    if [ -f "main.py" ] && [ -f "config/config.example.yaml" ]; then
+        log_info "Проект уже существует, пропускаем скачивание"
+        return 0
     fi
+    
+    # Клонируем репозиторий (создастся директория DiscoCoop)
+    local repo_url="https://github.com/ArtemKiyashko/DiscoCoop.git"
+    
+    log_info "Клонируем репозиторий..."
+    if ! git clone "$repo_url"; then
+        log_error "Не удалось клонировать репозиторий с GitHub"
+        exit 1
+    fi
+    
+    # Переходим в директорию проекта
+    cd DiscoCoop
+    
+    log_success "Проект скачан, перешли в директорию DiscoCoop"
 }
 
-# Проверка идемпотентности - можно запускать многократно
-check_installation() {
-    local component="$1"
-    case "$component" in
-        "python")
-            [ -x "$PYTHON_DIR/bin/python3" ] && return 0 || return 1
-            ;;
-        "ollama")  
-            command -v ollama &> /dev/null && return 0 || return 1
-            ;;
-        "project")
-            [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/main.py" ] && return 0 || return 1
-            ;;
-    esac
+# Проверка установленного Python
+is_python_installed() {
+    [ -x "$PYTHON_DIR/bin/python3" ] && return 0 || return 1
 }
 
 # Установка переносимого Python
 install_python() {
-    if check_installation "python"; then
+    if is_python_installed; then
         log_success "Python уже установлен: $($PYTHON_DIR/bin/python3 --version)"
         return 0
     fi
@@ -362,9 +335,14 @@ main() {
         exit 1
     fi
     
-    # Проверяем наличие curl
+    # Проверяем наличие необходимых инструментов
     if ! command -v curl &> /dev/null; then
         log_error "curl не найден. Установите curl для продолжения."
+        exit 1
+    fi
+    
+    if ! command -v git &> /dev/null; then
+        log_error "git не найден. Установите git для продолжения."
         exit 1
     fi
     
@@ -374,10 +352,8 @@ main() {
     # Добавляем в PATH
     export PATH="$PYTHON_DIR/bin:$OLLAMA_DIR/bin:$LOCAL_BIN:$PATH"
     
-    # Скачиваем шаблоны если их нет
-    if [ ! -d "templates" ]; then
-        download_templates
-    fi
+    # Скачиваем проект если его нет
+    download_project
     
     # Выполняем установку по этапам
     log_info "🚀 Начинаем установку..."
@@ -390,9 +366,6 @@ main() {
     
     # Финальная проверка
     final_check
-    
-    # Очищаем временные шаблоны
-    cleanup_templates
     
     echo
     log_success "✨ Готово! Теперь настройте config/config.yaml и запустите сервисы."
