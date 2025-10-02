@@ -181,17 +181,28 @@ install_project() {
     
     export PATH="$PYTHON_DIR/bin:$PATH"
     
-    # Обновляем pip
+    # Создаем виртуальное окружение
+    local venv_dir="venv"
+    if [ ! -d "$venv_dir" ]; then
+        log_info "Создаем виртуальное окружение..."
+        $PYTHON_DIR/bin/python3 -m venv "$venv_dir"
+    fi
+    
+    # Активируем виртуальное окружение
+    log_info "Активируем виртуальное окружение..."
+    source "$venv_dir/bin/activate"
+    
+    # Обновляем pip в виртуальном окружении
     log_info "Обновляем pip..."
-    $PYTHON_DIR/bin/python3 -m pip install --upgrade pip --user
+    python -m pip install --upgrade pip
     
     # Устанавливаем зависимости Python
     if [ -f "requirements.txt" ]; then
         log_info "Устанавливаем зависимости из requirements.txt..."
-        $PYTHON_DIR/bin/python3 -m pip install -r requirements.txt --user
+        pip install -r requirements.txt
     else
         log_info "Устанавливаем базовые зависимости..."
-        $PYTHON_DIR/bin/python3 -m pip install --user \
+        pip install \
             "python-telegram-bot>=20.0" \
             "python-dotenv" \
             "aiohttp" \
@@ -276,6 +287,14 @@ final_check() {
         log_success "Python: готов"
     else
         log_error "Python: не найден"
+        all_ok=false
+    fi
+    
+    # Проверяем виртуальное окружение
+    if [ -f "venv/bin/python" ]; then
+        log_success "Виртуальное окружение: готово"
+    else
+        log_error "Виртуальное окружение: не найдено"
         all_ok=false
     fi
     
