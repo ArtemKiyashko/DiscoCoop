@@ -26,7 +26,7 @@ class LLMAgent:
         """Получение HTTP сессии"""
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=120)  # Увеличиваем до 2 минут для Steam Deck
+                timeout=aiohttp.ClientTimeout(total=180)  # 3 минуты для Steam Deck с учетом медленной модели
             )
         return self.session
     
@@ -87,8 +87,8 @@ class LLMAgent:
         except Exception as e:
             error_type = type(e).__name__
             if "Timeout" in error_type:
-                print(f"❌ Таймаут при тестировании модели (>120s)")
-                print(f"💡 Модель {self.model} может быть слишком большой для Steam Deck")
+                print(f"❌ Таймаут при тестировании модели (>180s)")
+                print(f"💡 Модель {self.model} работает слишком медленно для Steam Deck")
                 print(f"💡 Попробуйте более легкую модель: ollama pull llama3.2:1b")
             else:
                 print(f"❌ Ошибка тестирования модели: {e}")

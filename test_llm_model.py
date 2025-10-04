@@ -6,11 +6,12 @@ import asyncio
 import sys
 import os
 
-# Добавляем путь к src для импортов
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# Добавляем путь к корню проекта для импортов
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
 
-from utils.config import Config
-from llm.agent import LLMAgent
+from src.utils.config import Config
+from src.llm.agent import LLMAgent
 
 
 async def test_llm():
@@ -35,13 +36,13 @@ async def test_llm():
             return False
         
         # 2. Тестируем модель простым запросом
-        print(f"\n2️⃣ Тестируем модель коротким запросом...")
+        print(f"\n2️⃣ Тестируем модель коротким запросом (может занять ~30-60с)...")
         if not await agent.test_model():
             print("❌ Тест модели неудачен")
             return False
         
         # 3. Тестируем более сложный запрос
-        print(f"\n3️⃣ Тестируем игровую команду...")
+        print(f"\n3️⃣ Тестируем игровую команду (может занять ~30-60с)...")
         test_command = "открой дверь"
         result = await agent.process_command(test_command)
         
