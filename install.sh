@@ -204,7 +204,6 @@ install_project() {
         log_info "Устанавливаем базовые зависимости..."
         pip install \
             "python-telegram-bot>=20.0" \
-            "python-dotenv" \
             "aiohttp" \
             "pillow" \
             "requests"
