@@ -43,7 +43,7 @@ def test_tools():
     """Тестируем инструменты"""
     tools_ok = True
     
-    for tool in ["xwd", "convert", "import"]:
+    for tool in ["screenshot-tool", "image-convert"]:
         tool_path = os.path.expanduser(f"~/.local/bin/{tool}")
         if os.path.exists(tool_path):
             print(f"✅ {tool}: {tool_path}")

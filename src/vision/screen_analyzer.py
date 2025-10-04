@@ -64,23 +64,33 @@ class ScreenAnalyzer:
             
             # Делаем скриншот конкретного окна
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                cmd_screenshot = f"xwd -id {window_id} | convert xwd:- {tmp_file.name}"
-                subprocess.run(cmd_screenshot, shell=True, check=True)
-                
-                screenshot = Image.open(tmp_file.name)
-                os.unlink(tmp_file.name)
-                
-                return screenshot
+                # Пытаемся использовать наш универсальный инструмент
+                cmd_screenshot = f"screenshot-tool {tmp_file.name}"
+                try:
+                    subprocess.run(cmd_screenshot, shell=True, check=True)
+                    screenshot = Image.open(tmp_file.name)
+                    os.unlink(tmp_file.name)
+                    return screenshot
+                except:
+                    # Fallback на старый метод если есть
+                    if subprocess.run("which xwd", shell=True, capture_output=True).returncode == 0:
+                        cmd_screenshot = f"xwd -id {window_id} | convert xwd:- {tmp_file.name}"
+                        subprocess.run(cmd_screenshot, shell=True, check=True)
+                        screenshot = Image.open(tmp_file.name)
+                        os.unlink(tmp_file.name)
+                        return screenshot
+                    else:
+                        raise
                 
         except Exception as e:
             error_msg = str(e)
             print(f"Linux screenshot error: {error_msg}")
             
             # Проверяем на конкретные ошибки и даем советы
-            if "convert: command not found" in error_msg or "xwd" in error_msg:
-                print("💡 Отсутствуют системные команды для скриншотов.")
-                print("   Запустите: cd ~/disco_coop && ./fix_screenshots.sh")
-                print("   Или установите: sudo pacman -S imagemagick xorg-xwd")
+            if "screenshot-tool" in error_msg or "convert" in error_msg or "xwd" in error_msg:
+                print("💡 Проблема с инструментами для скриншотов.")
+                print("   Запустите: ./install.sh --reinstall")
+                print("   Или установите вручную: sudo pacman -S grim (для Wayland) или scrot (для X11)")
             
             # Fallback на обычный скриншот экрана
             try:
