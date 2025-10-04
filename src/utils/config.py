@@ -3,7 +3,7 @@
 """
 import os
 import yaml
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -23,6 +23,7 @@ class LLMConfig:
     model: str
     vision_model: str
     base_url: str
+    api_key: str
     max_tokens: int
     temperature: float
     system_prompt: str
@@ -71,16 +72,18 @@ class Config:
     security: SecurityConfig
     
     @classmethod
-    def load(cls, config_path: str = None) -> 'Config':
+    def load(cls, config_path: Optional[str] = None) -> 'Config':
         """Загрузка конфигурации из файла"""
         if config_path is None:
             # Ищем config.yaml в папке config
             base_dir = Path(__file__).parent.parent.parent
-            config_path = base_dir / "config" / "config.yaml"
+            config_path_obj = base_dir / "config" / "config.yaml"
             
             # Если нет config.yaml, используем example
-            if not config_path.exists():
-                config_path = base_dir / "config" / "config.example.yaml"
+            if not config_path_obj.exists():
+                config_path_obj = base_dir / "config" / "config.example.yaml"
+            
+            config_path = str(config_path_obj)
         
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Config file not found: {config_path}")
