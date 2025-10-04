@@ -60,7 +60,7 @@ fi
 echo -e "\n6. Тестируем создание скриншота:"
 if [ -f "$HOME/.local/bin/screenshot-tool" ]; then
     echo "🕒 Запускаем screenshot-tool (таймаут 10 сек)..."
-    if timeout 10 "$HOME/.local/bin/screenshot-tool" /tmp/test_screenshot.png "Test Window" 2>&1; then
+    if timeout 10 "$HOME/.local/bin/screenshot-tool" /tmp/test_screenshot.png "Disco Elysium" 2>&1; then
         if [ -f "/tmp/test_screenshot.png" ]; then
             echo "✅ Скриншот создан успешно"
             ls -lh /tmp/test_screenshot.png

@@ -4,29 +4,64 @@
 OUTPUT_FILE="${1:-screenshot.png}"
 WINDOW_TITLE="${2:-Disco Elysium}"
 
+echo "🔍 Начинаем поиск окна: '$WINDOW_TITLE'"
+
 # Функция для поиска окна игры
 find_game_window() {
-    if command -v xdotool &> /dev/null; then
-        # Ищем окно по названию
-        WINDOW_ID=$(xdotool search --name "$WINDOW_TITLE" | head -1)
-        if [ -n "$WINDOW_ID" ]; then
-            echo "$WINDOW_ID"
-            return 0
-        fi
+    if ! command -v xdotool &> /dev/null; then
+        echo "❌ xdotool не найден"
+        return 1
     fi
+    
+    # Показываем все окна для отладки
+    echo "📋 Список всех окон:"
+    xdotool search --name "." 2>/dev/null | head -10 | while read -r wid; do
+        name=$(xdotool getwindowname "$wid" 2>/dev/null || echo "unknown")
+        echo "  ID: $wid, Name: '$name'"
+    done
+    
+    # Ищем окно по точному названию
+    echo "🔍 Поиск по точному названию '$WINDOW_TITLE'..."
+    WINDOW_ID=$(xdotool search --name "$WINDOW_TITLE" 2>/dev/null | head -1)
+    if [ -n "$WINDOW_ID" ]; then
+        echo "✅ Найдено по точному названию: $WINDOW_ID"
+        echo "$WINDOW_ID"
+        return 0
+    fi
+    
+    # Попробуем поиск по части названия  
+    echo "🔍 Поиск по части названия 'Disco'..."
+    WINDOW_ID=$(xdotool search --name "Disco" 2>/dev/null | head -1)
+    if [ -n "$WINDOW_ID" ]; then
+        echo "✅ Найдено по части названия: $WINDOW_ID"
+        echo "$WINDOW_ID"
+        return 0
+    fi
+    
+    echo "❌ Окно не найдено"
     return 1
 }
 
 # Steam Deck Desktop Mode - используем Spectacle
 if command -v spectacle &> /dev/null; then
     # Пытаемся сделать скриншот конкретного окна
+    echo "🔍 Ищем окно: '$WINDOW_TITLE'"
     WINDOW_ID=$(find_game_window)
     if [ -n "$WINDOW_ID" ]; then
         echo "🎮 Скриншот окна игры (ID: $WINDOW_ID)"
-        spectacle -w -n -b -o "$OUTPUT_FILE"
+        # Активируем окно и делаем скриншот
+        xdotool windowactivate "$WINDOW_ID" 2>/dev/null || true
+        sleep 0.2
+        spectacle --activewindow --nonotify --background --output "$OUTPUT_FILE"
     else
         echo "🖥️  Скриншот всего экрана (окно игры не найдено)"
-        spectacle -f -b -o "$OUTPUT_FILE"
+        # Показываем доступные окна для отладки
+        echo "📋 Доступные окна:"
+        xdotool search --name "." 2>/dev/null | while read -r wid; do
+            name=$(xdotool getwindowname "$wid" 2>/dev/null || echo "unknown")
+            echo "  ID: $wid, Name: $name"
+        done | head -5
+        spectacle --fullscreen --nonotify --background --output "$OUTPUT_FILE"
     fi
     exit $?
 fi
