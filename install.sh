@@ -203,10 +203,14 @@ install_project() {
     else
         log_info "Устанавливаем базовые зависимости..."
         pip install \
-            "python-telegram-bot>=20.0" \
+            "python-telegram-bot>=22.0" \
             "aiohttp" \
             "pillow" \
-            "requests"
+            "requests" \
+            "PyAutoGUI" \
+            "pynput" \
+            "loguru" \
+            "pyyaml"
     fi
     
     # Создаем конфигурационный файл если его нет
