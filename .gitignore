@@ -13,6 +13,9 @@ pip-log.txt
 .env
 .venv
 
+# Configuration (don't commit real config with secrets)
+config/config.yaml
+
 # IDEs
 .vscode/
 .idea/

@@ -283,14 +283,6 @@ install_project() {
     # Создаем директории
     mkdir -p screenshots logs
     
-    # Копируем тестовый скрипт из шаблона
-    if [ -f "templates/test_setup.py" ]; then
-        cp templates/test_setup.py .
-        chmod +x test_setup.py
-    else
-        log_warning "Шаблон test_setup.py не найден, тест недоступен"
-    fi
-    
     log_success "Проект настроен"
 }
 
@@ -388,11 +380,10 @@ final_check() {
         echo
         echo "📝 Следующие шаги:"
         echo "1. Настройте config/config.yaml с токеном бота"
-        echo "2. Запустите тест: ./test_setup.py"
-        echo "3. Запустите сервисы:"
+        echo "2. Запустите сервисы:"
         echo "   systemctl --user enable --now ollama"
         echo "   systemctl --user enable --now disco-coop-bot"
-        echo "4. Проверьте статус: systemctl --user status ollama disco-coop-bot"
+        echo "3. Проверьте статус: systemctl --user status ollama disco-coop-bot"
         echo
     else
         log_error "⚠️  Установка завершена с ошибками"
@@ -467,24 +458,16 @@ case "${1:-}" in
         echo
         echo "Опции:"
         echo "  --help, -h     Показать эту справку"
-        echo "  --test         Запустить тест окружения"
         echo "  --clean        Очистить установку"
         echo "  --reinstall    Переустановить все компоненты"
         echo
         exit 0
         ;;
-    --test)
-        if [ -f "test_setup.py" ]; then
-            exec "$PYTHON_DIR/bin/python3" test_setup.py
-        else
-            log_error "test_setup.py не найден. Сначала выполните установку."
-            exit 1
-        fi
-        ;;
+
     --clean)
         log_info "🗑️  Очистка установки..."
         rm -rf "$PYTHON_DIR" "$OLLAMA_DIR" "$LOCAL_BIN"
-        rm -f test_setup.py
+
         rm -rf templates  # Удаляем временные шаблоны
         systemctl --user stop ollama disco-coop-bot 2>/dev/null || true
         systemctl --user disable ollama disco-coop-bot 2>/dev/null || true

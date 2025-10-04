@@ -1,4 +1,8 @@
-# Конфигурация Disco Coop Bot
+# Конфигурация Disco Coop Bot для Steam Deck
+# 
+# ⚠️ ВАЖНО: Локальные LLM модели на Steam Deck работают очень медленно (30-60 сек на запрос).
+# Для комфортной игры настоятельно рекомендуется использовать внешние API.
+#
 telegram:
   bot_token: "YOUR_BOT_TOKEN_HERE"  # Получите от @BotFather в Telegram
   allowed_chats:  # Белый список чатов (chat_id)
