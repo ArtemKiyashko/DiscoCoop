@@ -66,9 +66,12 @@ class ScreenAnalyzer:
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
                 # Пытаемся использовать наш универсальный инструмент
                 cmd_screenshot = f"screenshot-tool {tmp_file.name}"
+                print(f"📸 Выполняем команду: {cmd_screenshot}")
                 try:
-                    subprocess.run(cmd_screenshot, shell=True, check=True)
+                    result = subprocess.run(cmd_screenshot, shell=True, check=True, capture_output=True, text=True)
+                    print(f"✅ Скриншот создан: {tmp_file.name}")
                     screenshot = Image.open(tmp_file.name)
+                    print(f"🖼️  Размер изображения: {screenshot.size}")
                     os.unlink(tmp_file.name)
                     return screenshot
                 except:

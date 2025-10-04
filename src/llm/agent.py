@@ -82,9 +82,18 @@ class LLMAgent:
             
             response = await self._query_vision_llm(prompt, screenshot)
             
-            if response and 'message' in response:
+            # Отладочная информация
+            if response:
+                print(f"🔍 LLM response keys: {list(response.keys())}")
+                print(f"🔍 LLM response: {response}")
+            
+            # Ollama API возвращает структуру: {"response": "текст ответа", ...}
+            if response and 'response' in response:
+                return response['response']
+            elif response and 'message' in response:
                 return response['message']['content']
             
+            print("❌ Неожиданная структура ответа LLM")
             return None
             
         except Exception as e:
@@ -143,9 +152,13 @@ class LLMAgent:
         """Запрос к vision LLM для анализа изображений"""
         try:
             # Конвертируем изображение в base64
+            print(f"🖼️  Конвертируем изображение {screenshot.size} в base64...")
             img_buffer = io.BytesIO()
             screenshot.save(img_buffer, format='PNG')
-            img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+            img_data = img_buffer.getvalue()
+            img_base64 = base64.b64encode(img_data).decode('utf-8')
+            
+            print(f"📏 Размер изображения: {len(img_data)} байт, base64: {len(img_base64)} символов")
             
             session = await self._get_session()
             
