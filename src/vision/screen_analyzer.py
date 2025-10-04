@@ -49,10 +49,13 @@ class ScreenAnalyzer:
             import tempfile
             import os
             
-            # Используем упрощенный инструмент для Steam Deck
+            # Используем упрощенный инструмент для Steam Deck с принудительным обновлением
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                cmd_screenshot = f"screenshot-tool {tmp_file.name} '{self.window_title}'"
-                print(f"📸 Создаем скриншот: {cmd_screenshot}")
+                # Добавляем timestamp для избежания кеширования
+                import time
+                timestamp = int(time.time() * 1000)  # миллисекунды для уникальности
+                cmd_screenshot = f"screenshot-tool {tmp_file.name} '{self.window_title}' --timestamp={timestamp}"
+                print(f"📸 Создаем свежий скриншот: {cmd_screenshot}")
                 
                 result = subprocess.run(
                     cmd_screenshot, 
@@ -98,6 +101,7 @@ class ScreenAnalyzer:
             Текстовое описание экрана или None при ошибке
         """
         try:
+            # ВАЖНО: Всегда делаем свежий скриншот для избежания кеширования
             screenshot = await self.take_screenshot()
             
             if not screenshot:
@@ -106,7 +110,7 @@ class ScreenAnalyzer:
             # Оптимизируем размер изображения для отправки в LLM
             screenshot = self._optimize_screenshot(screenshot)
             
-            # Кешируем скриншот
+            # Сохраняем для других методов
             self.last_screenshot = screenshot
             
             # Отправляем на анализ в LLM

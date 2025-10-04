@@ -57,7 +57,8 @@ class DiscoCoopBot:
         # Команда /describe для описания экрана (в том числе /describe@botname)
         self.application.add_handler(CommandHandler("describe", self.describe_command))
         
-
+        # Команда /help для получения справки
+        self.application.add_handler(CommandHandler("help", self.help_command))
         
         # Обработчик для личных сообщений (все текстовые)
         self.application.add_handler(MessageHandler(
@@ -131,7 +132,6 @@ class DiscoCoopBot:
         
         keyboard = [
             [InlineKeyboardButton("📖 Описать экран", callback_data="describe")],
-            [InlineKeyboardButton("📊 Статус игры", callback_data="status")],
             [InlineKeyboardButton("❓ Помощь", callback_data="help")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -154,7 +154,7 @@ class DiscoCoopBot:
 **Основные команды:**
 • `/start` - Начать работу с ботом
 • `/describe` - Описать что происходит на экране
-• `/status` - Показать статус игры и бота
+• `/game <команда>` - Выполнить игровое действие
 • `/help` - Показать эту справку
 
 **Игровые команды (примеры):**
@@ -227,36 +227,6 @@ class DiscoCoopBot:
         except Exception as e:
             logger.error(f"Error in describe_command: {e}")
             await update.message.reply_text("❌ Ошибка при анализе экрана.")
-    
-    async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Команда /status"""
-        chat_id = update.effective_chat.id
-        
-        if not self._is_authorized_chat(chat_id):
-            await update.message.reply_text("❌ Доступ запрещен.")
-            return
-        
-        game_status = "🟢 Запущена" if self.game_controller.is_game_running() else "🔴 Не найдена"
-        llm_status = "🟢 Подключена" if await self.llm_agent.is_available() else "🔴 Недоступна"
-        
-        session_time = ""
-        if chat_id in self.active_sessions:
-            elapsed = datetime.now() - self.active_sessions[chat_id]
-            session_time = f"⏱️ Время сессии: {elapsed.seconds // 60} мин"
-        
-        status_text = f"""
-📊 **Статус системы**
-
-🎮 Игра: {game_status}
-🤖 LLM: {llm_status}
-💬 Чат: {"🟢 Авторизован" if self._is_authorized_chat(chat_id) else "🔴 Не авторизован"}
-{session_time}
-
-📋 Команд выполнено: {self.chat_command_count.get(chat_id, 0)}
-⏳ Лимит: {self.config.security.rate_limit}/мин
-        """
-        
-        await update.message.reply_text(status_text, parse_mode='Markdown')
     
     async def handle_private_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик личных сообщений"""
@@ -406,8 +376,6 @@ class DiscoCoopBot:
         
         if query.data == "describe":
             await self.describe_command(update, context)
-        elif query.data == "status":
-            await self.status_command(update, context)
         elif query.data == "help":
             await self.help_command(update, context)
     
