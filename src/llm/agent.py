@@ -26,7 +26,7 @@ class LLMAgent:
         """Получение HTTP сессии"""
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=30)
+                timeout=aiohttp.ClientTimeout(total=120)  # Увеличиваем до 2 минут для Steam Deck
             )
         return self.session
     
@@ -50,6 +50,48 @@ class LLMAgent:
                 return False
         except Exception as e:
             print(f"❌ Ошибка проверки Ollama: {e}")
+            return False
+    
+    async def test_model(self) -> bool:
+        """Простое тестирование модели с коротким запросом"""
+        try:
+            print(f"🧪 Тестируем модель {self.model} простым запросом...")
+            
+            session = await self._get_session()
+            test_payload = {
+                "model": self.model,
+                "prompt": "Привет! Ответь одним словом: работает?",
+                "stream": False,
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": 10  # Ограничиваем короткий ответ
+                }
+            }
+            
+            import time
+            start_time = time.time()
+            
+            async with session.post(f"{self.base_url}/api/generate", json=test_payload) as response:
+                elapsed = time.time() - start_time
+                
+                if response.status == 200:
+                    result = await response.json()
+                    response_text = result.get('response', '').strip()
+                    print(f"✅ Модель отвечает за {elapsed:.1f}с: '{response_text}'")
+                    return True
+                else:
+                    error_text = await response.text()
+                    print(f"❌ Тест модели неудачен {response.status}: {error_text}")
+                    return False
+                    
+        except Exception as e:
+            error_type = type(e).__name__
+            if "Timeout" in error_type:
+                print(f"❌ Таймаут при тестировании модели (>120s)")
+                print(f"💡 Модель {self.model} может быть слишком большой для Steam Deck")
+                print(f"💡 Попробуйте более легкую модель: ollama pull llama3.2:1b")
+            else:
+                print(f"❌ Ошибка тестирования модели: {e}")
             return False
     
     async def process_command(self, user_command: str, screenshot: Optional[Image.Image] = None) -> Optional[Dict[str, Any]]:

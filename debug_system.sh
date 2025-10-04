@@ -75,3 +75,16 @@ if [ -f "$HOME/.local/bin/screenshot-tool" ]; then
 else
     echo "❌ screenshot-tool не найден"
 fi
+
+echo -e "\n7. Тестируем LLM модель:"
+if [ -f "test_llm_model.py" ]; then
+    echo "🧪 Запускаем тест модели (может занять до 2 минут)..."
+    if python3 test_llm_model.py; then
+        echo "✅ LLM модель работает корректно"
+    else
+        echo "❌ Проблемы с LLM моделью"
+        echo "💡 Попробуйте более легкую модель: ollama pull llama3.2:1b"
+    fi
+else
+    echo "❌ test_llm_model.py не найден"
+fi
