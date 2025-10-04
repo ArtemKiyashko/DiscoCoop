@@ -488,7 +488,9 @@ class GameController:
                 return self._detect_game_display_windows()
                 
         except Exception as e:
-            print(f"Error detecting game display: {e}")
+            print(f"❌ Ошибка определения дисплея игры: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def _detect_game_display_linux(self) -> Optional[Dict[str, Any]]:
@@ -501,35 +503,52 @@ class GameController:
             result = subprocess.run(displays_cmd, shell=True, capture_output=True, text=True)
             
             if result.returncode != 0:
+                print(f"❌ Команда xrandr вернула ошибку: {result.stderr}")
                 return None
+            
+            print(f"🖥️  Вывод xrandr --listmonitors:")
+            print(result.stdout)
             
             displays = []
             for line in result.stdout.split('\n')[1:]:  # Пропускаем заголовок
                 if line.strip():
-                    parts = line.strip().split()
-                    if len(parts) >= 4:
-                        # Парсим строку вида: "0: +*eDP-1 1280/309x800/193+0+0  eDP-1"
-                        geometry = parts[2]  # например "1280/309x800/193+0+0"
-                        if 'x' in geometry and '+' in geometry:
-                            size_part = geometry.split('+')[0]  # "1280/309x800/193"
-                            offset_parts = geometry.split('+')[1:]  # ["0", "0"]
+                    try:
+                        print(f"🔍 Парсим строку: '{line.strip()}'")
+                        parts = line.strip().split()
+                        if len(parts) >= 4:
+                            # Парсим строку вида: "0: +*eDP-1 1280/309x800/193+0+0  eDP-1"
+                            geometry = parts[2]  # например "1280/309x800/193+0+0"
+                            print(f"  Геометрия: {geometry}")
                             
-                            if '/' in size_part:
-                                width_part = size_part.split('x')[0]  # "1280/309"
-                                height_part = size_part.split('x')[1]  # "800/193"
-                                width = int(width_part.split('/')[0])
-                                height = int(height_part.split('/')[0])
-                                x_offset = int(offset_parts[0])
-                                y_offset = int(offset_parts[1])
+                            if 'x' in geometry and '+' in geometry:
+                                size_part = geometry.split('+')[0]  # "1280/309x800/193"
+                                offset_parts = geometry.split('+')[1:]  # ["0", "0"]
+                                print(f"  Размер: {size_part}, Смещения: {offset_parts}")
                                 
-                                displays.append({
-                                    'name': parts[-1],
-                                    'width': width,
-                                    'height': height,
-                                    'x': x_offset,
-                                    'y': y_offset,
-                                    'primary': '*' in line
-                                })
+                                if '/' in size_part:
+                                    width_part = size_part.split('x')[0]  # "1280/309"
+                                    height_part = size_part.split('x')[1]  # "800/193"
+                                    width = int(width_part.split('/')[0])
+                                    height = int(height_part.split('/')[0])
+                                    
+                                    # Очищаем offset от дополнительной информации
+                                    x_offset_str = offset_parts[0].split()[0]  # "0" из "0 (screen: 0)"
+                                    y_offset_str = offset_parts[1].split()[0] if len(offset_parts) > 1 else "0"
+                                    x_offset = int(x_offset_str)
+                                    y_offset = int(y_offset_str)
+                                    
+                                    display_info = {
+                                        'name': parts[-1],
+                                        'width': width,
+                                        'height': height,
+                                        'x': x_offset,
+                                        'y': y_offset,
+                                        'primary': '*' in line
+                                    }
+                                    displays.append(display_info)
+                                    print(f"  ✅ Добавлен дисплей: {display_info}")
+                    except Exception as e:
+                        print(f"  ❌ Ошибка парсинга строки '{line.strip()}': {e}")
             
             # Ищем окно игры и определяем на каком дисплее оно находится
             window_cmd = f"xdotool search --name '{self.window_title}'"
@@ -652,22 +671,40 @@ class GameController:
         Returns:
             Скорректированные координаты для конкретного дисплея
         """
+        original_x, original_y = x, y
+        
         # Если автоопределение включено, получаем информацию о дисплее
         if self.multi_display_config.auto_detect_game_screen:
             if self.game_display_info is None:
+                print("🔍 Определяем дисплей с игрой...")
                 self.game_display_info = self.detect_game_display()
+                if self.game_display_info:
+                    print(f"🎮 Игра найдена на дисплее: {self.game_display_info['name']} "
+                          f"({self.game_display_info['width']}x{self.game_display_info['height']} "
+                          f"+{self.game_display_info['x']}+{self.game_display_info['y']})")
+                else:
+                    print("⚠️  Не удалось определить дисплей с игрой")
             
             if self.game_display_info:
                 # Добавляем смещение дисплея
                 x += self.game_display_info['x']
                 y += self.game_display_info['y']
+                print(f"📐 Добавлено смещение дисплея: +{self.game_display_info['x']}+{self.game_display_info['y']}")
         
         # Применяем ручное смещение из конфигурации
-        x += self.multi_display_config.coordinate_offset['x']
-        y += self.multi_display_config.coordinate_offset['y']
+        manual_offset_x = self.multi_display_config.coordinate_offset['x']
+        manual_offset_y = self.multi_display_config.coordinate_offset['y']
+        if manual_offset_x != 0 or manual_offset_y != 0:
+            x += manual_offset_x
+            y += manual_offset_y
+            print(f"📐 Добавлено ручное смещение: +{manual_offset_x}+{manual_offset_y}")
         
         # Применяем масштабирование
-        x = int(x * self.multi_display_config.display_scaling)
-        y = int(y * self.multi_display_config.display_scaling)
+        if self.multi_display_config.display_scaling != 1.0:
+            x = int(x * self.multi_display_config.display_scaling)
+            y = int(y * self.multi_display_config.display_scaling)
+            print(f"🔍 Применено масштабирование: x{self.multi_display_config.display_scaling}")
+        
+        print(f"🎯 Координаты: ({original_x}, {original_y}) → ({x}, {y})")
         
         return x, y

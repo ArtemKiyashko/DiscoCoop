@@ -40,8 +40,12 @@ def test_display_detection():
                                     height_part = size_part.split('x')[1]
                                     width = int(width_part.split('/')[0])
                                     height = int(height_part.split('/')[0])
-                                    x_offset = int(offset_parts[0])
-                                    y_offset = int(offset_parts[1])
+                                    
+                                    # Очищаем offset от дополнительной информации
+                                    x_offset_str = offset_parts[0].split()[0]  # "0" из "0 (screen: 0)"
+                                    y_offset_str = offset_parts[1].split()[0] if len(offset_parts) > 1 else "0"
+                                    x_offset = int(x_offset_str)
+                                    y_offset = int(y_offset_str)
                                     
                                     displays.append({
                                         'name': display_name,
