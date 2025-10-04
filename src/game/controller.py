@@ -227,9 +227,15 @@ class GameController:
             
             # Выполняем клик
             if button == 'right':
-                pyautogui.rightClick(x, y, clicks=clicks)
+                pyautogui.rightClick(x, y)
+                # Для дополнительных кликов
+                for _ in range(clicks - 1):
+                    pyautogui.rightClick(x, y)
             else:
-                pyautogui.leftClick(x, y, clicks=clicks)
+                pyautogui.leftClick(x, y)
+                # Для дополнительных кликов
+                for _ in range(clicks - 1):
+                    pyautogui.leftClick(x, y)
             
             return True
             

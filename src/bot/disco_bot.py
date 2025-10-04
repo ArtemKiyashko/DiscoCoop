@@ -271,10 +271,7 @@ class DiscoCoopBot:
         # Обрабатываем команду напрямую
         await self.process_game_action(update, context, command_args)
     
-    async def describe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Команда /describe для описания текущего экрана"""
-        logger.info(f"📋 Команда /describe")
-        await self.process_game_action(update, context, "описать экран")
+
     
     async def handle_inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработчик inline запросов для групп"""

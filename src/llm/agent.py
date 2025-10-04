@@ -46,6 +46,12 @@ class LLMAgent:
                         print(f"💡 Загрузите модель: ollama pull {self.model}")
                         return False
                     
+                    if self.vision_model not in available_models:
+                        print(f"⚠️ Vision модель {self.vision_model} не найдена!")
+                        print(f"💡 Загрузите модель: ollama pull {self.vision_model}")
+                        print(f"💡 Или используйте fallback на основную модель")
+                        # Не возвращаем False - система может работать без vision модели
+                    
                     return True
                 return False
         except Exception as e:
@@ -135,12 +141,17 @@ class LLMAgent:
         try:
             prompt = self.config.vision.describe_prompt
             
+            # Используем только vision модель для анализа изображений
             response = await self._query_vision_llm(prompt, screenshot)
+            
+            if not response:
+                print("❌ Vision модель недоступна или не может обработать изображение")
+                return None
             
             # Отладочная информация
             if response:
-                print(f"🔍 LLM response keys: {list(response.keys())}")
-                print(f"🔍 LLM response: {response}")
+                print(f"🔍 Vision LLM response keys: {list(response.keys())}")
+                print(f"🔍 Vision LLM response: {response}")
             
             # Ollama API возвращает структуру: {"response": "текст ответа", ...}
             if response and 'response' in response:
@@ -148,7 +159,7 @@ class LLMAgent:
             elif response and 'message' in response:
                 return response['message']['content']
             
-            print("❌ Неожиданная структура ответа LLM")
+            print("❌ Неожиданная структура ответа от Vision LLM")
             return None
             
         except Exception as e:
