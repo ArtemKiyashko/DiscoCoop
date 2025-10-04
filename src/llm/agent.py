@@ -156,20 +156,22 @@ class LLMAgent:
                     error_text = await response.text()
                     print(f"LLM API error {response.status}: {error_text}")
                     
-        except aiohttp.ClientConnectorError as e:
-            print(f"❌ Не удается подключиться к Ollama серверу ({self.base_url})")
-            print(f"💡 Проверьте что Ollama запущен: systemctl --user status ollama")
-        except aiohttp.ClientTimeout as e:
-            print(f"❌ Таймаут при запросе к LLM: {e}")
-            print(f"💡 Попробуйте увеличить таймаут или проверить модель {self.model}")
-        except json.JSONDecodeError as e:
-            print(f"❌ Ошибка декодирования JSON ответа: {e}")
         except Exception as e:
-            print(f"❌ Error querying LLM: {e}")
-            print(f"🔍 URL: {self.base_url}/api/generate")
-            print(f"🔍 Model: {self.model}")
-            import traceback
-            traceback.print_exc()
+            error_type = type(e).__name__
+            if "ClientConnectorError" in error_type:
+                print(f"❌ Не удается подключиться к Ollama серверу ({self.base_url})")
+                print(f"💡 Проверьте что Ollama запущен: systemctl --user status ollama")
+            elif "Timeout" in error_type:
+                print(f"❌ Таймаут при запросе к LLM: {e}")
+                print(f"💡 Попробуйте увеличить таймаут или проверить модель {self.model}")
+            elif "JSONDecodeError" in error_type:
+                print(f"❌ Ошибка декодирования JSON ответа: {e}")
+            else:
+                print(f"❌ Error querying LLM: {e}")
+                print(f"🔍 URL: {self.base_url}/api/generate")
+                print(f"🔍 Model: {self.model}")
+                import traceback
+                traceback.print_exc()
         
         return None
     
@@ -205,11 +207,15 @@ class LLMAgent:
                     error_text = await response.text()
                     print(f"Vision LLM API error {response.status}: {error_text}")
                     
-        except aiohttp.ClientConnectorError as e:
-            print(f"❌ Не удается подключиться к Ollama серверу для vision модели")
-            print(f"💡 Убедитесь что модель {self.vision_model} загружена: ollama pull {self.vision_model}")
         except Exception as e:
-            print(f"Error querying vision LLM: {e}")
+            error_type = type(e).__name__
+            if "ClientConnectorError" in error_type:
+                print(f"❌ Не удается подключиться к Ollama серверу для vision модели")
+                print(f"💡 Убедитесь что модель {self.vision_model} загружена: ollama pull {self.vision_model}")
+            else:
+                print(f"Error querying vision LLM: {e}")
+                import traceback
+                traceback.print_exc()
         
         return None
     
