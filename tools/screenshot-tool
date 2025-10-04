@@ -36,17 +36,12 @@ if command -v spectacle &> /dev/null; then
         echo "🎮 Скриншот окна игры (ID: $WINDOW_ID)"
         # Активируем окно и делаем скриншот
         xdotool windowactivate "$WINDOW_ID" 2>/dev/null || true
-        sleep 0.3
-        # Используем windowUnderCursor после активации окна
-        spectacle --windowUnderCursor --nonotify --background --output "$OUTPUT_FILE" &
-        SPECTACLE_PID=$!
-        # Кликаем на окно чтобы spectacle его захватил
-        sleep 0.1
-        xdotool windowfocus "$WINDOW_ID" 2>/dev/null || true
-        wait $SPECTACLE_PID
+        sleep 0.2
+        # Используем activewindow (-a) 
+        spectacle -a -n -b -o "$OUTPUT_FILE"
     else
         echo "🖥️  Скриншот всего экрана (окно игры не найдено)"
-        spectacle --fullscreen --nonotify --background --output "$OUTPUT_FILE"
+        spectacle -f -n -b -o "$OUTPUT_FILE"
     fi
     exit $?
 fi
