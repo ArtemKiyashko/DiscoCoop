@@ -329,6 +329,13 @@ class DiscoCoopBot:
             result = await self.llm_agent.process_command(user_command, screenshot)
             
             if result and result.get('actions'):
+                # Логируем координаты от LLM для диагностики
+                actions = result.get('actions', [])
+                click_actions = [a for a in actions if a.get('type') == 'click']
+                if click_actions:
+                    coords = [(a.get('x', 0), a.get('y', 0)) for a in click_actions]
+                    logger.info(f"🎯 LLM предложил координаты: {coords}")
+                
                 # Выполняем действия в игре
                 success = await self.game_controller.execute_actions(result['actions'])
                 

@@ -51,11 +51,13 @@ class ScreenAnalyzer:
             
             # Используем упрощенный инструмент для Steam Deck с принудительным обновлением
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                # Добавляем timestamp для избежания кеширования
+                # Добавляем небольшую задержку для гарантии свежего скриншота
                 import time
-                timestamp = int(time.time() * 1000)  # миллисекунды для уникальности
-                cmd_screenshot = f"screenshot-tool {tmp_file.name} '{self.window_title}' --timestamp={timestamp}"
-                print(f"📸 Создаем свежий скриншот: {cmd_screenshot}")
+                import asyncio
+                await asyncio.sleep(0.1)  # 100ms задержка
+                
+                cmd_screenshot = f"screenshot-tool {tmp_file.name} '{self.window_title}'"
+                print(f"📸 Создаем СВЕЖИЙ скриншот: {cmd_screenshot}")
                 
                 result = subprocess.run(
                     cmd_screenshot, 
@@ -72,6 +74,19 @@ class ScreenAnalyzer:
                 
                 screenshot = Image.open(tmp_file.name)
                 print(f"🖼️  Размер изображения: {screenshot.size}")
+                
+                # Проверяем, отличается ли новый скриншот от предыдущего
+                if hasattr(self, 'last_screenshot') and self.last_screenshot:
+                    import hashlib
+                    new_hash = hashlib.md5(screenshot.tobytes()).hexdigest()[:8]
+                    old_hash = hashlib.md5(self.last_screenshot.tobytes()).hexdigest()[:8]
+                    
+                    if new_hash == old_hash:
+                        print(f"⚠️  ВНИМАНИЕ: Новый скриншот идентичен предыдущему (хеш: {new_hash})")
+                        print("   Возможно экран не изменился, или есть проблема с кешированием")
+                    else:
+                        print(f"✅ Скриншот обновлен: {old_hash} -> {new_hash}")
+                
                 os.unlink(tmp_file.name)
                 return screenshot
                 
