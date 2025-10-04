@@ -35,8 +35,21 @@ class LLMAgent:
         try:
             session = await self._get_session()
             async with session.get(f"{self.base_url}/api/tags") as response:
-                return response.status == 200
-        except Exception:
+                if response.status == 200:
+                    # Проверяем доступные модели
+                    models_data = await response.json()
+                    available_models = [model['name'] for model in models_data.get('models', [])]
+                    print(f"🤖 Доступные модели: {available_models}")
+                    
+                    if self.model not in available_models:
+                        print(f"❌ Модель {self.model} не найдена!")
+                        print(f"💡 Загрузите модель: ollama pull {self.model}")
+                        return False
+                    
+                    return True
+                return False
+        except Exception as e:
+            print(f"❌ Ошибка проверки Ollama: {e}")
             return False
     
     async def process_command(self, user_command: str, screenshot: Optional[Image.Image] = None) -> Optional[Dict[str, Any]]:
@@ -123,6 +136,9 @@ class LLMAgent:
         try:
             session = await self._get_session()
             
+            # Проверяем доступность модели
+            print(f"🤖 Отправляем запрос к модели: {self.model}")
+            
             payload = {
                 "model": self.model,
                 "prompt": prompt,
@@ -143,8 +159,17 @@ class LLMAgent:
         except aiohttp.ClientConnectorError as e:
             print(f"❌ Не удается подключиться к Ollama серверу ({self.base_url})")
             print(f"💡 Проверьте что Ollama запущен: systemctl --user status ollama")
+        except aiohttp.ClientTimeout as e:
+            print(f"❌ Таймаут при запросе к LLM: {e}")
+            print(f"💡 Попробуйте увеличить таймаут или проверить модель {self.model}")
+        except json.JSONDecodeError as e:
+            print(f"❌ Ошибка декодирования JSON ответа: {e}")
         except Exception as e:
-            print(f"Error querying LLM: {e}")
+            print(f"❌ Error querying LLM: {e}")
+            print(f"🔍 URL: {self.base_url}/api/generate")
+            print(f"🔍 Model: {self.model}")
+            import traceback
+            traceback.print_exc()
         
         return None
     
@@ -191,10 +216,14 @@ class LLMAgent:
     def _parse_llm_response(self, response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Парсинг ответа LLM"""
         try:
+            print(f"🔍 Получен ответ от LLM: {response}")
+            
             if 'response' not in response:
+                print("❌ Ключ 'response' не найден в ответе LLM")
                 return None
             
             response_text = response['response'].strip()
+            print(f"🔍 Текст ответа: {response_text[:200]}...")
             
             # Пытаемся распарсить JSON
             if response_text.startswith('{') and response_text.endswith('}'):
