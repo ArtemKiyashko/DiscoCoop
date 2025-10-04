@@ -23,6 +23,13 @@ Disco Coop позволяет команде играть в Disco Elysium че�
 - Запустите Disco Elysium в **оконном режиме**
 
 ### 2. Автоматическая установка
+
+#### Быстрая установка одной командой:
+```bash
+curl -fsSL https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh | bash
+```
+
+#### Или ручная установка:
 ```bash
 git clone https://github.com/ArtemKiyashko/DiscoCoop.git
 cd DiscoCoop

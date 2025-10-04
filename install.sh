@@ -2,6 +2,9 @@
 
 # Disco Coop - Установочный скрипт для Steam Deck
 # Полностью автономная установка без использования pacman
+#
+# Быстрая установка:
+# curl -fsSL https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh | bash
 
 set -e  # Остановка при ошибках
 
@@ -454,7 +457,12 @@ main() {
 # Обработка аргументов командной строки
 case "${1:-}" in
     --help|-h)
+        echo "🎮 Disco Coop - Установка для Steam Deck"
+        echo
         echo "Использование: $0 [опции]"
+        echo
+        echo "Быстрая установка одной командой:"  
+        echo "  curl -fsSL https://raw.githubusercontent.com/ArtemKiyashko/DiscoCoop/main/install.sh | bash"
         echo
         echo "Опции:"
         echo "  --help, -h     Показать эту справку"
