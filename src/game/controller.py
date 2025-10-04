@@ -83,12 +83,12 @@ class GameController:
             True если игра найдена и запущена
         """
         try:
-            if platform.system() == "Linux":
-                return self._is_game_running_linux()
-            elif platform.system() == "Darwin":
-                return self._is_game_running_macos()
-            else:  # Windows
-                return self._is_game_running_windows()
+            # Только для Steam Deck (Linux)
+            if platform.system() != "Linux":
+                print("❌ Этот проект поддерживает только Steam Deck (Linux)")
+                return False
+                
+            return self._is_game_running_linux()
                 
         except Exception as e:
             print(f"Error checking game status: {e}")
@@ -115,38 +115,7 @@ class GameController:
         except Exception:
             return False
     
-    def _is_game_running_macos(self) -> bool:
-        """Проверка игры в macOS"""
-        import subprocess
-        
-        try:
-            cmd = f"pgrep -i '{self.window_title}'"
-            result = subprocess.run(cmd, shell=True, capture_output=True)
-            return result.returncode == 0
-            
-        except Exception:
-            return False
-    
-    def _is_game_running_windows(self) -> bool:
-        """Проверка игры в Windows"""
-        try:
-            import win32gui
-            
-            def enum_windows_callback(hwnd, windows):
-                if win32gui.IsWindowVisible(hwnd):
-                    window_text = win32gui.GetWindowText(hwnd)
-                    if self.window_title.lower() in window_text.lower():
-                        windows.append(hwnd)
-                return True
-            
-            windows = []
-            win32gui.EnumWindows(enum_windows_callback, windows)
-            
-            return len(windows) > 0
-            
-        except Exception:
-            return False
-    
+
     async def execute_actions(self, actions: List[Dict[str, Any]]) -> bool:
         """
         Выполнение списка действий
@@ -375,12 +344,12 @@ class GameController:
     async def _focus_game_window(self) -> bool:
         """Фокусировка на окне игры"""
         try:
-            if platform.system() == "Linux":
-                return await self._focus_window_linux()
-            elif platform.system() == "Darwin":
-                return await self._focus_window_macos()
-            else:  # Windows
-                return await self._focus_window_windows()
+            # Только для Steam Deck (Linux)
+            if platform.system() != "Linux":
+                print("❌ Этот проект поддерживает только Steam Deck (Linux)")
+                return False
+                
+            return await self._focus_window_linux()
                 
         except Exception as e:
             print(f"Error focusing game window: {e}")
@@ -411,42 +380,7 @@ class GameController:
         except Exception:
             return False
     
-    async def _focus_window_macos(self) -> bool:
-        """Фокусировка окна в macOS"""
-        # В macOS фокусировка сложнее, пока просто возвращаем True
-        return True
-    
-    async def _focus_window_windows(self) -> bool:
-        """Фокусировка окна в Windows"""
-        try:
-            import win32gui
-            import win32con
-            
-            def enum_windows_callback(hwnd, windows):
-                if win32gui.IsWindowVisible(hwnd):
-                    window_text = win32gui.GetWindowText(hwnd)
-                    if self.window_title.lower() in window_text.lower():
-                        windows.append(hwnd)
-                return True
-            
-            windows = []
-            win32gui.EnumWindows(enum_windows_callback, windows)
-            
-            if windows:
-                hwnd = windows[0]
-                
-                # Активируем окно
-                win32gui.SetForegroundWindow(hwnd)
-                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
-                
-                await asyncio.sleep(0.1)
-                return True
-            
-            return False
-            
-        except Exception:
-            return False
-    
+
     async def stop_all_actions(self):
         """Экстренная остановка всех действий"""
         self.emergency_stop = True
@@ -480,12 +414,12 @@ class GameController:
             if not self.multi_display_config.auto_detect_game_screen:
                 return None
             
-            if platform.system() == "Linux":
-                return self._detect_game_display_linux()
-            elif platform.system() == "Darwin":
-                return self._detect_game_display_macos()
-            else:  # Windows
-                return self._detect_game_display_windows()
+            # Только для Steam Deck (Linux)
+            if platform.system() != "Linux":
+                print("❌ Этот проект поддерживает только Steam Deck (Linux)")
+                return None
+                
+            return self._detect_game_display_linux()
                 
         except Exception as e:
             print(f"❌ Ошибка определения дисплея игры: {e}")
@@ -562,13 +496,22 @@ class GameController:
                 geom_result = subprocess.run(geometry_cmd, shell=True, capture_output=True, text=True)
                 
                 if geom_result.returncode == 0:
+                    print(f"🔍 Вывод xdotool getwindowgeometry:")
+                    print(geom_result.stdout)
+                    
                     # Парсим вывод getwindowgeometry
                     for line in geom_result.stdout.split('\n'):
                         if 'Position:' in line:
                             pos_str = line.split('Position:')[1].strip()
+                            print(f"  Позиция строка: '{pos_str}'")
+                            
                             if ',' in pos_str:
-                                window_x = int(pos_str.split(',')[0])
-                                window_y = int(pos_str.split(',')[1])
+                                # Очищаем координаты от дополнительной информации типа "(screen: 0)"
+                                x_str = pos_str.split(',')[0].strip().split()[0]  # "0" из "0 (screen: 0)"
+                                y_str = pos_str.split(',')[1].strip().split()[0]  # "0" из "0 (screen: 0)"
+                                window_x = int(x_str)
+                                window_y = int(y_str)
+                                print(f"  Позиция окна: ({window_x}, {window_y})")
                                 
                                 # Определяем на каком дисплее находится окно
                                 for display in displays:
@@ -578,7 +521,15 @@ class GameController:
                                         print(f"🎮 Игра найдена на дисплее {display['name']}: {display['width']}x{display['height']} +{display['x']}+{display['y']}")
                                         return display
             
-            # Если не удалось найти окно, возвращаем основной дисплей
+            # Если не удалось найти окно, используем fallback логику
+            if self.multi_display_config.prefer_external_display and len(displays) > 1:
+                # Ищем внешний дисплей (не eDP)
+                external_display = next((d for d in displays if 'eDP' not in d['name'] and not d['name'].startswith('eDP')), None)
+                if external_display:
+                    print(f"🖥️  Используем предпочтительный внешний дисплей: {external_display['name']} ({external_display['width']}x{external_display['height']} +{external_display['x']}+{external_display['y']})")
+                    return external_display
+            
+            # Возвращаем основной дисплей
             primary_display = next((d for d in displays if d.get('primary')), displays[0] if displays else None)
             if primary_display:
                 print(f"🖥️  Используем основной дисплей: {primary_display['name']}")
@@ -589,78 +540,7 @@ class GameController:
             print(f"Error detecting Linux display: {e}")
             return None
     
-    def _detect_game_display_macos(self) -> Optional[Dict[str, Any]]:
-        """Определение дисплея с игрой в macOS"""
-        # В macOS пока используем базовую реализацию
-        return {
-            'name': 'main',
-            'width': 1920, 
-            'height': 1080,
-            'x': 0,
-            'y': 0,
-            'primary': True
-        }
-    
-    def _detect_game_display_windows(self) -> Optional[Dict[str, Any]]:
-        """Определение дисплея с игрой в Windows"""
-        try:
-            import win32gui
-            import win32api
-            
-            # Получаем информацию о мониторах
-            monitors = win32api.EnumDisplayMonitors()
-            
-            # Ищем окно игры
-            def enum_windows_callback(hwnd, windows):
-                if win32gui.IsWindowVisible(hwnd):
-                    window_text = win32gui.GetWindowText(hwnd)
-                    if self.window_title.lower() in window_text.lower():
-                        windows.append(hwnd)
-                return True
-            
-            windows = []
-            win32gui.EnumWindows(enum_windows_callback, windows)
-            
-            if windows:
-                hwnd = windows[0]
-                rect = win32gui.GetWindowRect(hwnd)
-                window_x, window_y = rect[0], rect[1]
-                
-                # Определяем на каком мониторе находится окно
-                for i, monitor in enumerate(monitors):
-                    monitor_info = win32api.GetMonitorInfo(monitor[0])
-                    work_area = monitor_info['Work']
-                    
-                    if (work_area[0] <= window_x < work_area[2] and
-                        work_area[1] <= window_y < work_area[3]):
-                        
-                        return {
-                            'name': f'Monitor_{i}',
-                            'width': work_area[2] - work_area[0],
-                            'height': work_area[3] - work_area[1], 
-                            'x': work_area[0],
-                            'y': work_area[1],
-                            'primary': i == 0
-                        }
-            
-            # Возвращаем основной монитор
-            if monitors:
-                monitor_info = win32api.GetMonitorInfo(monitors[0][0])
-                work_area = monitor_info['Work']
-                return {
-                    'name': 'Primary',
-                    'width': work_area[2] - work_area[0],
-                    'height': work_area[3] - work_area[1],
-                    'x': work_area[0], 
-                    'y': work_area[1],
-                    'primary': True
-                }
-                
-        except Exception as e:
-            print(f"Error detecting Windows display: {e}")
-            
-        return None
-    
+
     def adjust_coordinates(self, x: int, y: int) -> tuple:
         """
         Корректировка координат с учетом мультидисплея

@@ -24,19 +24,18 @@ class ScreenAnalyzer:
     
     async def take_screenshot(self) -> Optional[Image.Image]:
         """
-        Захват скриншота игрового окна
+        Захват скриншота игрового окна (только для Steam Deck/Linux)
         
         Returns:
             PIL Image или None при ошибке
         """
         try:
-            # Для Steam Deck (Linux) и общий случай
-            if platform.system() == "Linux":
-                return await self._take_screenshot_linux()
-            elif platform.system() == "Darwin":  # macOS
-                return await self._take_screenshot_macos()
-            else:  # Windows
-                return await self._take_screenshot_windows()
+            # Только для Steam Deck (Linux)
+            if platform.system() != "Linux":
+                print("❌ Этот проект поддерживает только Steam Deck (Linux)")
+                return None
+                
+            return await self._take_screenshot_linux()
                 
         except Exception as e:
             print(f"Error taking screenshot: {e}")
@@ -90,85 +89,7 @@ class ScreenAnalyzer:
                 print(f"Fallback screenshot also failed: {fallback_e}")
                 return None
     
-    async def _take_screenshot_macos(self) -> Optional[Image.Image]:
-        """Захват скриншота в macOS"""
-        try:
-            # В macOS используем общий захват экрана
-            screenshot = ImageGrab.grab()
-            return screenshot
-            
-        except Exception as e:
-            print(f"macOS screenshot error: {e}")
-            return None
-    
-    async def _take_screenshot_windows(self) -> Optional[Image.Image]:
-        """Захват скриншота в Windows"""
-        try:
-            import win32gui
-            import win32ui
-            import win32con
-            
-            # Ищем окно игры
-            hwnd = win32gui.FindWindow(None, self.window_title)
-            
-            if hwnd == 0:
-                # Если точное название не найдено, ищем по части названия
-                def enum_windows_callback(hwnd, windows):
-                    if win32gui.IsWindowVisible(hwnd):
-                        window_text = win32gui.GetWindowText(hwnd)
-                        if self.window_title.lower() in window_text.lower():
-                            windows.append(hwnd)
-                    return True
-                
-                windows = []
-                win32gui.EnumWindows(enum_windows_callback, windows)
-                
-                if not windows:
-                    # Fallback на скриншот всего экрана
-                    return ImageGrab.grab()
-                
-                hwnd = windows[0]
-            
-            # Получаем размеры окна
-            rect = win32gui.GetWindowRect(hwnd)
-            width = rect[2] - rect[0]
-            height = rect[3] - rect[1]
-            
-            # Создаем контекст устройства
-            hwndDC = win32gui.GetWindowDC(hwnd)
-            mfcDC = win32ui.CreateDCFromHandle(hwndDC)
-            saveDC = mfcDC.CreateCompatibleDC()
-            
-            # Создаем bitmap
-            saveBitMap = win32ui.CreateBitmap()
-            saveBitMap.CreateCompatibleBitmap(mfcDC, width, height)
-            saveDC.SelectObject(saveBitMap)
-            
-            # Копируем содержимое окна
-            saveDC.BitBlt((0, 0), (width, height), mfcDC, (0, 0), win32con.SRCCOPY)
-            
-            # Конвертируем в PIL Image
-            bmpinfo = saveBitMap.GetInfo()
-            bmpstr = saveBitMap.GetBitmapBits(True)
-            screenshot = Image.frombuffer(
-                'RGB',
-                (bmpinfo['bmWidth'], bmpinfo['bmHeight']),
-                bmpstr, 'raw', 'BGRX', 0, 1
-            )
-            
-            # Освобождаем ресурсы
-            win32gui.DeleteObject(saveBitMap.GetHandle())
-            saveDC.DeleteDC()
-            mfcDC.DeleteDC()
-            win32gui.ReleaseDC(hwnd, hwndDC)
-            
-            return screenshot
-            
-        except Exception as e:
-            print(f"Windows screenshot error: {e}")
-            # Fallback на скриншот всего экрана
-            return ImageGrab.grab()
-    
+
     async def describe_screen(self) -> Optional[str]:
         """
         Получение описания того, что происходит на экране
@@ -199,26 +120,102 @@ class ScreenAnalyzer:
     
     def _optimize_screenshot(self, screenshot: Image.Image) -> Image.Image:
         """
-        Оптимизация скриншота для отправки в LLM
+        Подготовка скриншота для отправки в LLM
+        Скриншот передается без изменения размера для точного позиционирования
         
         Args:
             screenshot: Исходный скриншот
             
         Returns:
-            Оптимизированный скриншот
+            Скриншот в формате RGB без изменения размера
         """
-        # Получаем целевое разрешение из конфига
-        target_width = self.config.game.screen_resolution['width']
-        target_height = self.config.game.screen_resolution['height']
-        
-        # Изменяем размер, сохраняя пропорции
-        screenshot.thumbnail((target_width, target_height), Image.Resampling.LANCZOS)
+        print(f"📷 Обработка скриншота: {screenshot.size}")
         
         # Конвертируем в RGB если нужно
         if screenshot.mode != 'RGB':
             screenshot = screenshot.convert('RGB')
         
         return screenshot
+    
+    def _get_game_window_size(self) -> Optional[tuple]:
+        """
+        Получает размер окна игры через xdotool для точного позиционирования
+        
+        Returns:
+            Кортеж (width, height) или None если окно не найдено
+        """
+        if platform.system() != 'Linux':
+            print("⚠️  Автоматическое определение размера окна доступно только на Linux")
+            return None
+            
+        try:
+            import subprocess
+            
+            # Поиск окна Disco Elysium
+            search_patterns = ['Disco', 'disco', 'Elysium']
+            
+            for pattern in search_patterns:
+                try:
+                    result = subprocess.run(
+                        ['xdotool', 'search', '--name', pattern],
+                        capture_output=True, text=True, timeout=5
+                    )
+                    
+                    if result.returncode == 0 and result.stdout.strip():
+                        window_ids = result.stdout.strip().split('\n')
+                        
+                        for window_id in window_ids:
+                            try:
+                                # Получаем геометрию окна
+                                geometry_result = subprocess.run(
+                                    ['xdotool', 'getwindowgeometry', window_id],
+                                    capture_output=True, text=True, timeout=2
+                                )
+                                
+                                if geometry_result.returncode == 0:
+                                    # Парсим размеры из вывода xdotool
+                                    # Формат: "Geometry: 1280x800+0+0"
+                                    for line in geometry_result.stdout.split('\n'):
+                                        if 'Geometry:' in line:
+                                            # Извлекаем размеры
+                                            geometry = line.split('Geometry:')[1].strip()
+                                            size_part = geometry.split('+')[0]  # "1280x800"
+                                            width, height = map(int, size_part.split('x'))
+                                            print(f"🎮 Определен размер окна игры: {width}x{height}")
+                                            return (width, height)
+                            except (subprocess.TimeoutExpired, ValueError, IndexError):
+                                continue
+                                
+                except subprocess.TimeoutExpired:
+                    continue
+                    
+        except Exception as e:
+            print(f"❌ Ошибка при получении размера окна игры: {e}")
+            
+        print("⚠️  Окно игры не найдено, будет использован размер скриншота")
+        return None
+    
+    def get_game_resolution(self) -> Tuple[int, int]:
+        """
+        Получает текущее разрешение игры для точного позиционирования
+        
+        Returns:
+            Кортеж (width, height) - реальное разрешение окна игры
+        """
+        # Пытаемся получить реальный размер окна игры
+        game_window_size = self._get_game_window_size()
+        if game_window_size:
+            return game_window_size
+            
+        # Если не удалось определить размер окна, используем размер последнего скриншота
+        if self.last_screenshot:
+            width, height = self.last_screenshot.size
+            print(f"📐 Используем размер скриншота: {width}x{height}")
+            return (width, height)
+            
+        # Fallback - типичное разрешение для Steam Deck
+        print("⚠️  Не удалось определить разрешение игры, используем 1280x800")
+        return (1280, 800)
     
     def find_ui_elements(self, screenshot: Optional[Image.Image] = None) -> dict:
         """

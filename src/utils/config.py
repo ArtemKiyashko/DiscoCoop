@@ -44,7 +44,6 @@ class GameConfig:
     window_title: str
     screenshot_interval: float
     action_delay: float
-    screen_resolution: Dict[str, int]
     multi_display: MultiDisplayConfig
 
 

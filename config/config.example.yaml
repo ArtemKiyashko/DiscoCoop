@@ -51,21 +51,18 @@ llm:
     {"actions": [{"type": "click", "x": 400, "y": 300}], "description": "Кликнул на дверь"}
 
 game:
-  window_title: "Disco Elysium"  # Название окна игры
-  screenshot_interval: 1.0  # Интервал снятия скриншотов (сек)
-  action_delay: 0.5  # Задержка между действиями (сек)
-  screen_resolution:
-    width: 1280
-    height: 800
+  window_title: "Disco Elysium"
+  screenshot_interval: 2.0
+  action_delay: 1.0
   
-  # Настройки для внешних дисплеев (Steam Deck + монитор)
+  # Настройки для работы с множественными дисплеями (Steam Deck + внешний монитор)
   multi_display:
-    auto_detect_game_screen: true  # Автоматически найти экран с игрой
-    prefer_external_display: true  # Предпочитать внешний дисплей для игры
-    coordinate_offset:  # Смещение координат если игра на другом экране
+    auto_detect_game_screen: true        # Автоматически определять дисплей с игрой
+    prefer_external_display: true       # Предпочитать внешний монитор при наличии
+    coordinate_offset:                   # Ручное смещение координат (если нужно)
       x: 0
       y: 0
-    display_scaling: 1.0  # Масштабирование для HiDPI дисплеев
+    display_scaling: 1.0                 # Масштабирование координат (обычно 1.0)
 
 vision:
   describe_prompt: |
