@@ -196,11 +196,31 @@ class DiscoCoopBot:
         await update.message.reply_text("📸 Анализирую экран...")
         
         try:
-            # Делаем скриншот и анализируем
+            # Делаем скриншот
+            screenshot = await self.screen_analyzer.take_screenshot()
+            
+            if not screenshot:
+                await update.message.reply_text("❌ Не удалось получить скриншот. Убедитесь, что игра запущена.")
+                return
+            
+            # Анализируем скриншот
             description = await self.screen_analyzer.describe_screen()
             
             if description:
-                await update.message.reply_text(f"👁️ **На экране:**\n{description}", parse_mode='Markdown')
+                # Отправляем скриншот с описанием
+                from io import BytesIO
+                
+                # Сохраняем скриншот в память
+                bio = BytesIO()
+                screenshot.save(bio, format='PNG')
+                bio.seek(0)
+                
+                # Отправляем фото с описанием в подписи
+                await update.message.reply_photo(
+                    photo=bio,
+                    caption=f"👁️ **На экране:**\n{description}",
+                    parse_mode='Markdown'
+                )
             else:
                 await update.message.reply_text("❌ Не удалось проанализировать экран. Убедитесь, что игра запущена.")
         
