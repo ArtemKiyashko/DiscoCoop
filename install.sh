@@ -284,8 +284,13 @@ install_project() {
             
         # Пытаемся установить проблемные пакеты отдельно
         log_info "Устанавливаем игровые контроллеры..."
-        if pip install "PyAutoGUI>=0.9.50"; then
-            log_success "PyAutoGUI установлен"
+        
+        # Устанавливаем базовые зависимости для PyAutoGUI
+        pip install "pillow" "python3-xlib" || true
+        
+        # Устанавливаем PyAutoGUI без evdev (только базовые зависимости)
+        if pip install --no-deps "PyAutoGUI>=0.9.50"; then
+            log_success "PyAutoGUI установлен (без evdev)"
         else
             log_warning "PyAutoGUI не удалось установить - игровой ввод будет недоступен"
         fi
@@ -307,7 +312,8 @@ install_project() {
             
         # Пытаемся установить проблемные пакеты отдельно
         log_info "Устанавливаем игровые контроллеры..."
-        pip install "PyAutoGUI" || log_warning "PyAutoGUI не удалось установить"
+        pip install "python3-xlib" || true
+        pip install --no-deps "PyAutoGUI" || log_warning "PyAutoGUI не удалось установить"
         pip install "pynput" || log_warning "pynput не удалось установить"
     fi
     

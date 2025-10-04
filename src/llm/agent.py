@@ -127,7 +127,13 @@ class LLMAgent:
             async with session.post(f"{self.base_url}/api/generate", json=payload) as response:
                 if response.status == 200:
                     return await response.json()
-                
+                else:
+                    error_text = await response.text()
+                    print(f"LLM API error {response.status}: {error_text}")
+                    
+        except aiohttp.ClientConnectorError as e:
+            print(f"❌ Не удается подключиться к Ollama серверу ({self.base_url})")
+            print(f"💡 Проверьте что Ollama запущен: systemctl --user status ollama")
         except Exception as e:
             print(f"Error querying LLM: {e}")
         
@@ -157,7 +163,13 @@ class LLMAgent:
             async with session.post(f"{self.base_url}/api/generate", json=payload) as response:
                 if response.status == 200:
                     return await response.json()
-                
+                else:
+                    error_text = await response.text()
+                    print(f"Vision LLM API error {response.status}: {error_text}")
+                    
+        except aiohttp.ClientConnectorError as e:
+            print(f"❌ Не удается подключиться к Ollama серверу для vision модели")
+            print(f"💡 Убедитесь что модель {self.vision_model} загружена: ollama pull {self.vision_model}")
         except Exception as e:
             print(f"Error querying vision LLM: {e}")
         
