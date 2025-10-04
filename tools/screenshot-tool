@@ -1,0 +1,47 @@
+#!/bin/bash
+# Инструмент скриншотов для Steam Deck / Linux
+
+OUTPUT_FILE="${1:-screenshot.png}"
+WINDOW_TITLE="${2:-Disco Elysium}"
+
+# Функция для поиска окна игры
+find_game_window() {
+    if command -v xdotool &> /dev/null; then
+        # Ищем окно по названию
+        WINDOW_ID=$(xdotool search --name "$WINDOW_TITLE" | head -1)
+        if [ -n "$WINDOW_ID" ]; then
+            echo "$WINDOW_ID"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Steam Deck Desktop Mode - используем Spectacle
+if command -v spectacle &> /dev/null; then
+    # Пытаемся сделать скриншот конкретного окна
+    WINDOW_ID=$(find_game_window)
+    if [ -n "$WINDOW_ID" ]; then
+        echo "🎮 Скриншот окна игры (ID: $WINDOW_ID)"
+        spectacle -w -n -b -o "$OUTPUT_FILE"
+    else
+        echo "🖥️  Скриншот всего экрана (окно игры не найдено)"
+        spectacle -f -b -o "$OUTPUT_FILE"
+    fi
+    exit $?
+fi
+
+# Fallback для других инструментов
+if command -v scrot &> /dev/null; then
+    scrot "$OUTPUT_FILE"
+    exit $?
+fi
+
+if command -v grim &> /dev/null; then
+    grim "$OUTPUT_FILE"  
+    exit $?
+fi
+
+echo "❌ Не найден инструмент для скриншотов" >&2
+echo "💡 Установите: sudo pacman -S spectacle" >&2
+exit 1

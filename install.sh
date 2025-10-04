@@ -96,101 +96,52 @@ install_python() {
     fi
 }
 
-# Создание инструментов для работы с изображениями
+# Создание инструментов для работы с изображениями  
 create_image_tools() {
-    log_info "🖼️  Настройка инструментов для изображений..."
+    log_info "🖼️  Настройка инструментов для изображений (Steam Deck)..."
     
     mkdir -p "$LOCAL_BIN"
     
-    # Проверяем доступные системные инструменты для скриншотов
-    local screenshot_tool=""
-    for tool in gnome-screenshot spectacle scrot flameshot grim; do
-        if command -v "$tool" &> /dev/null; then
-            screenshot_tool="$tool"
-            log_info "Найден инструмент скриншотов: $tool"
-            break
-        fi
-    done
+    # Проверяем необходимые инструменты для Steam Deck
+    local missing_tools=()
     
-    if [ -z "$screenshot_tool" ]; then
-        log_warning "Не найден системный инструмент для скриншотов"
-        log_info "💡 Рекомендуется установить: scrot или grim"
+    if ! command -v spectacle &> /dev/null; then
+        missing_tools+=("spectacle")
+    else
+        log_success "✅ Spectacle найден"
     fi
     
-    # Создаем универсальный скрипт для скриншотов вместо xwd wrapper
-    cat > "$LOCAL_BIN/screenshot-tool" << 'EOF'
-#!/bin/bash
-# Универсальный инструмент для создания скриншотов
-
-OUTPUT_FILE="${1:-screenshot.png}"
-
-if command -v grim &> /dev/null; then
-    # Wayland (Steam Deck в gaming mode)
-    grim "$OUTPUT_FILE"
-elif command -v gnome-screenshot &> /dev/null; then
-    gnome-screenshot -f "$OUTPUT_FILE"
-elif command -v spectacle &> /dev/null; then
-    spectacle -b -o "$OUTPUT_FILE"
-elif command -v scrot &> /dev/null; then
-    scrot "$OUTPUT_FILE"
-elif command -v flameshot &> /dev/null; then
-    flameshot full -p "$(dirname "$OUTPUT_FILE")" -r > "$OUTPUT_FILE"
-else
-    echo "❌ Не найден инструмент для скриншотов" >&2
-    exit 1
-fi
-EOF
+    if ! command -v xdotool &> /dev/null; then
+        missing_tools+=("xdotool")
+    else
+        log_success "✅ xdotool найден"
+    fi
     
-    chmod +x "$LOCAL_BIN/screenshot-tool"
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        log_warning "❌ Отсутствуют инструменты: ${missing_tools[*]}"
+        log_info "💡 Установите: sudo pacman -S ${missing_tools[*]}"
+    fi
     
-    # Создаем простой convert на Python вместо wrapper
-    cat > "$LOCAL_BIN/image-convert" << 'EOF'
-#!/usr/bin/env python3
-"""
-Простая конвертация изображений с помощью Pillow
-Заменяет ImageMagick convert для базовых операций
-"""
-import sys
-import os
-from PIL import Image
-
-def main():
-    if len(sys.argv) < 3:
-        print("Usage: image-convert input_file output_file", file=sys.stderr)
-        sys.exit(1)
+    # Копируем готовые инструменты из папки tools/
+    echo "🔧 Копируем инструменты для работы с изображениями..."
     
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
+    if [ -f "tools/screenshot-tool" ]; then
+        cp "tools/screenshot-tool" "$LOCAL_BIN/"
+        chmod +x "$LOCAL_BIN/screenshot-tool"
+        echo "✅ screenshot-tool установлен"
+    else
+        log_error "❌ Файл tools/screenshot-tool не найден"
+        return 1
+    fi
     
-    try:
-        # Открываем и конвертируем изображение
-        with Image.open(input_file) as img:
-            # Определяем формат по расширению
-            _, ext = os.path.splitext(output_file)
-            format_map = {
-                '.jpg': 'JPEG', '.jpeg': 'JPEG',
-                '.png': 'PNG', '.gif': 'GIF',
-                '.bmp': 'BMP', '.tiff': 'TIFF'
-            }
-            
-            fmt = format_map.get(ext.lower(), 'PNG')
-            
-            # Конвертируем в RGB если нужно для JPEG
-            if fmt == 'JPEG' and img.mode in ('RGBA', 'P'):
-                img = img.convert('RGB')
-            
-            img.save(output_file, format=fmt)
-            print(f"✅ Конвертировано: {input_file} -> {output_file}")
-            
-    except Exception as e:
-        print(f"❌ Ошибка конвертации: {e}", file=sys.stderr)
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
-EOF
-    
-    chmod +x "$LOCAL_BIN/image-convert"
+    if [ -f "tools/image-convert" ]; then
+        cp "tools/image-convert" "$LOCAL_BIN/"
+        chmod +x "$LOCAL_BIN/image-convert"
+        echo "✅ image-convert установлен"
+    else
+        log_error "❌ Файл tools/image-convert не найден"
+        return 1
+    fi
     
     log_success "Инструменты для изображений настроены"
 }

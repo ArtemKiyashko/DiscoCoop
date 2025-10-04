@@ -50,40 +50,28 @@ class ScreenAnalyzer:
             import tempfile
             import os
             
-            # Пытаемся найти окно игры
-            cmd_find = f"xdotool search --name '{self.window_title}'"
-            result = subprocess.run(cmd_find, shell=True, capture_output=True, text=True)
-            
-            if result.returncode != 0 or not result.stdout.strip():
-                # Если окно не найдено, делаем скриншот всего экрана
-                screenshot = ImageGrab.grab()
-                return screenshot
-            
-            # Получаем ID окна
-            window_id = result.stdout.strip().split('\n')[0]
-            
-            # Делаем скриншот конкретного окна
+            # Используем упрощенный инструмент для Steam Deck
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-                # Пытаемся использовать наш универсальный инструмент
-                cmd_screenshot = f"screenshot-tool {tmp_file.name}"
-                print(f"📸 Выполняем команду: {cmd_screenshot}")
-                try:
-                    result = subprocess.run(cmd_screenshot, shell=True, check=True, capture_output=True, text=True)
-                    print(f"✅ Скриншот создан: {tmp_file.name}")
-                    screenshot = Image.open(tmp_file.name)
-                    print(f"🖼️  Размер изображения: {screenshot.size}")
-                    os.unlink(tmp_file.name)
-                    return screenshot
-                except:
-                    # Fallback на старый метод если есть
-                    if subprocess.run("which xwd", shell=True, capture_output=True).returncode == 0:
-                        cmd_screenshot = f"xwd -id {window_id} | convert xwd:- {tmp_file.name}"
-                        subprocess.run(cmd_screenshot, shell=True, check=True)
-                        screenshot = Image.open(tmp_file.name)
-                        os.unlink(tmp_file.name)
-                        return screenshot
-                    else:
-                        raise
+                cmd_screenshot = f"screenshot-tool {tmp_file.name} '{self.window_title}'"
+                print(f"📸 Создаем скриншот: {cmd_screenshot}")
+                
+                result = subprocess.run(
+                    cmd_screenshot, 
+                    shell=True, 
+                    check=True, 
+                    capture_output=True, 
+                    text=True,
+                    timeout=10  # Увеличили таймаут
+                )
+                
+                print(f"✅ Скриншот создан: {tmp_file.name}")
+                if result.stdout:
+                    print(f"📝 Вывод: {result.stdout.strip()}")
+                
+                screenshot = Image.open(tmp_file.name)
+                print(f"🖼️  Размер изображения: {screenshot.size}")
+                os.unlink(tmp_file.name)
+                return screenshot
                 
         except Exception as e:
             error_msg = str(e)
