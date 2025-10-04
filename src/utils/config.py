@@ -30,12 +30,22 @@ class LLMConfig:
 
 
 @dataclass
+class MultiDisplayConfig:
+    """Конфигурация для работы с множественными дисплеями"""
+    auto_detect_game_screen: bool
+    prefer_external_display: bool
+    coordinate_offset: Dict[str, int]
+    display_scaling: float
+
+
+@dataclass
 class GameConfig:
     """Конфигурация игры"""
     window_title: str
     screenshot_interval: float
     action_delay: float
     screen_resolution: Dict[str, int]
+    multi_display: MultiDisplayConfig
 
 
 @dataclass
@@ -96,10 +106,17 @@ class Config:
     @classmethod
     def _from_dict(cls, data: Dict[str, Any]) -> 'Config':
         """Создание конфигурации из словаря"""
+        # Обрабатываем game конфигурацию с multi_display
+        game_data = data['game'].copy()
+        multi_display_data = game_data.pop('multi_display')
+        
         return cls(
             telegram=TelegramConfig(**data['telegram']),
             llm=LLMConfig(**data['llm']),
-            game=GameConfig(**data['game']),
+            game=GameConfig(
+                multi_display=MultiDisplayConfig(**multi_display_data),
+                **game_data
+            ),
             vision=VisionConfig(**data['vision']),
             logging=LoggingConfig(**data['logging']),
             security=SecurityConfig(**data['security'])

@@ -57,6 +57,15 @@ game:
   screen_resolution:
     width: 1280
     height: 800
+  
+  # Настройки для внешних дисплеев (Steam Deck + монитор)
+  multi_display:
+    auto_detect_game_screen: true  # Автоматически найти экран с игрой
+    prefer_external_display: true  # Предпочитать внешний дисплей для игры
+    coordinate_offset:  # Смещение координат если игра на другом экране
+      x: 0
+      y: 0
+    display_scaling: 1.0  # Масштабирование для HiDPI дисплеев
 
 vision:
   describe_prompt: |

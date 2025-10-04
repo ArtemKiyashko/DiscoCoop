@@ -36,6 +36,11 @@ class GameController:
         self.is_active = False
         self.emergency_stop = False
         
+        # Настройки мультидисплея
+        self.multi_display_config = config.game.multi_display
+        self.game_screen_offset = None  # Будет определен автоматически
+        self.game_display_info = None
+        
         # Проверяем доступность библиотек
         if not PYAUTOGUI_AVAILABLE:
             raise ImportError("PyAutoGUI не установлен. Установите его командой: pip install PyAutoGUI")
@@ -222,20 +227,25 @@ class GameController:
         clicks = action.get('clicks', 1)
         
         try:
+            # Корректируем координаты для мультидисплея
+            adjusted_x, adjusted_y = self.adjust_coordinates(x, y)
+            
+            print(f"🖱️  Клик: исходные координаты ({x}, {y}) -> скорректированные ({adjusted_x}, {adjusted_y})")
+            
             # Фокусируемся на игровом окне
             await self._focus_game_window()
             
             # Выполняем клик
             if button == 'right':
-                pyautogui.rightClick(x, y)
+                pyautogui.rightClick(adjusted_x, adjusted_y)
                 # Для дополнительных кликов
                 for _ in range(clicks - 1):
-                    pyautogui.rightClick(x, y)
+                    pyautogui.rightClick(adjusted_x, adjusted_y)
             else:
-                pyautogui.leftClick(x, y)
+                pyautogui.leftClick(adjusted_x, adjusted_y)
                 # Для дополнительных кликов
                 for _ in range(clicks - 1):
-                    pyautogui.leftClick(x, y)
+                    pyautogui.leftClick(adjusted_x, adjusted_y)
             
             return True
             
@@ -250,7 +260,9 @@ class GameController:
         duration = action.get('duration', 0.5)
         
         try:
-            pyautogui.moveTo(x, y, duration=duration)
+            # Корректируем координаты для мультидисплея
+            adjusted_x, adjusted_y = self.adjust_coordinates(x, y)
+            pyautogui.moveTo(adjusted_x, adjusted_y, duration=duration)
             return True
             
         except Exception as e:
@@ -456,3 +468,206 @@ class GameController:
     def get_mouse_position(self) -> tuple:
         """Получение текущей позиции мыши"""
         return pyautogui.position()
+    
+    def detect_game_display(self) -> Optional[Dict[str, Any]]:
+        """
+        Автоматическое определение дисплея где запущена игра
+        
+        Returns:
+            Информация о дисплее с игрой или None
+        """
+        try:
+            if not self.multi_display_config.auto_detect_game_screen:
+                return None
+            
+            if platform.system() == "Linux":
+                return self._detect_game_display_linux()
+            elif platform.system() == "Darwin":
+                return self._detect_game_display_macos()
+            else:  # Windows
+                return self._detect_game_display_windows()
+                
+        except Exception as e:
+            print(f"Error detecting game display: {e}")
+            return None
+    
+    def _detect_game_display_linux(self) -> Optional[Dict[str, Any]]:
+        """Определение дисплея с игрой в Linux"""
+        import subprocess
+        
+        try:
+            # Получаем информацию о всех дисплеях
+            displays_cmd = "xrandr --listmonitors"
+            result = subprocess.run(displays_cmd, shell=True, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                return None
+            
+            displays = []
+            for line in result.stdout.split('\n')[1:]:  # Пропускаем заголовок
+                if line.strip():
+                    parts = line.strip().split()
+                    if len(parts) >= 4:
+                        # Парсим строку вида: "0: +*eDP-1 1280/309x800/193+0+0  eDP-1"
+                        geometry = parts[2]  # например "1280/309x800/193+0+0"
+                        if 'x' in geometry and '+' in geometry:
+                            size_part = geometry.split('+')[0]  # "1280/309x800/193"
+                            offset_parts = geometry.split('+')[1:]  # ["0", "0"]
+                            
+                            if '/' in size_part:
+                                width_part = size_part.split('x')[0]  # "1280/309"
+                                height_part = size_part.split('x')[1]  # "800/193"
+                                width = int(width_part.split('/')[0])
+                                height = int(height_part.split('/')[0])
+                                x_offset = int(offset_parts[0])
+                                y_offset = int(offset_parts[1])
+                                
+                                displays.append({
+                                    'name': parts[-1],
+                                    'width': width,
+                                    'height': height,
+                                    'x': x_offset,
+                                    'y': y_offset,
+                                    'primary': '*' in line
+                                })
+            
+            # Ищем окно игры и определяем на каком дисплее оно находится
+            window_cmd = f"xdotool search --name '{self.window_title}'"
+            window_result = subprocess.run(window_cmd, shell=True, capture_output=True, text=True)
+            
+            if window_result.returncode == 0 and window_result.stdout.strip():
+                window_id = window_result.stdout.strip().split('\n')[0]
+                
+                # Получаем позицию окна
+                geometry_cmd = f"xdotool getwindowgeometry {window_id}"
+                geom_result = subprocess.run(geometry_cmd, shell=True, capture_output=True, text=True)
+                
+                if geom_result.returncode == 0:
+                    # Парсим вывод getwindowgeometry
+                    for line in geom_result.stdout.split('\n'):
+                        if 'Position:' in line:
+                            pos_str = line.split('Position:')[1].strip()
+                            if ',' in pos_str:
+                                window_x = int(pos_str.split(',')[0])
+                                window_y = int(pos_str.split(',')[1])
+                                
+                                # Определяем на каком дисплее находится окно
+                                for display in displays:
+                                    if (display['x'] <= window_x < display['x'] + display['width'] and
+                                        display['y'] <= window_y < display['y'] + display['height']):
+                                        
+                                        print(f"🎮 Игра найдена на дисплее {display['name']}: {display['width']}x{display['height']} +{display['x']}+{display['y']}")
+                                        return display
+            
+            # Если не удалось найти окно, возвращаем основной дисплей
+            primary_display = next((d for d in displays if d.get('primary')), displays[0] if displays else None)
+            if primary_display:
+                print(f"🖥️  Используем основной дисплей: {primary_display['name']}")
+            
+            return primary_display
+            
+        except Exception as e:
+            print(f"Error detecting Linux display: {e}")
+            return None
+    
+    def _detect_game_display_macos(self) -> Optional[Dict[str, Any]]:
+        """Определение дисплея с игрой в macOS"""
+        # В macOS пока используем базовую реализацию
+        return {
+            'name': 'main',
+            'width': 1920, 
+            'height': 1080,
+            'x': 0,
+            'y': 0,
+            'primary': True
+        }
+    
+    def _detect_game_display_windows(self) -> Optional[Dict[str, Any]]:
+        """Определение дисплея с игрой в Windows"""
+        try:
+            import win32gui
+            import win32api
+            
+            # Получаем информацию о мониторах
+            monitors = win32api.EnumDisplayMonitors()
+            
+            # Ищем окно игры
+            def enum_windows_callback(hwnd, windows):
+                if win32gui.IsWindowVisible(hwnd):
+                    window_text = win32gui.GetWindowText(hwnd)
+                    if self.window_title.lower() in window_text.lower():
+                        windows.append(hwnd)
+                return True
+            
+            windows = []
+            win32gui.EnumWindows(enum_windows_callback, windows)
+            
+            if windows:
+                hwnd = windows[0]
+                rect = win32gui.GetWindowRect(hwnd)
+                window_x, window_y = rect[0], rect[1]
+                
+                # Определяем на каком мониторе находится окно
+                for i, monitor in enumerate(monitors):
+                    monitor_info = win32api.GetMonitorInfo(monitor[0])
+                    work_area = monitor_info['Work']
+                    
+                    if (work_area[0] <= window_x < work_area[2] and
+                        work_area[1] <= window_y < work_area[3]):
+                        
+                        return {
+                            'name': f'Monitor_{i}',
+                            'width': work_area[2] - work_area[0],
+                            'height': work_area[3] - work_area[1], 
+                            'x': work_area[0],
+                            'y': work_area[1],
+                            'primary': i == 0
+                        }
+            
+            # Возвращаем основной монитор
+            if monitors:
+                monitor_info = win32api.GetMonitorInfo(monitors[0][0])
+                work_area = monitor_info['Work']
+                return {
+                    'name': 'Primary',
+                    'width': work_area[2] - work_area[0],
+                    'height': work_area[3] - work_area[1],
+                    'x': work_area[0], 
+                    'y': work_area[1],
+                    'primary': True
+                }
+                
+        except Exception as e:
+            print(f"Error detecting Windows display: {e}")
+            
+        return None
+    
+    def adjust_coordinates(self, x: int, y: int) -> tuple:
+        """
+        Корректировка координат с учетом мультидисплея
+        
+        Args:
+            x, y: Исходные координаты (относительно игрового окна)
+            
+        Returns:
+            Скорректированные координаты для конкретного дисплея
+        """
+        # Если автоопределение включено, получаем информацию о дисплее
+        if self.multi_display_config.auto_detect_game_screen:
+            if self.game_display_info is None:
+                self.game_display_info = self.detect_game_display()
+            
+            if self.game_display_info:
+                # Добавляем смещение дисплея
+                x += self.game_display_info['x']
+                y += self.game_display_info['y']
+        
+        # Применяем ручное смещение из конфигурации
+        x += self.multi_display_config.coordinate_offset['x']
+        y += self.multi_display_config.coordinate_offset['y']
+        
+        # Применяем масштабирование
+        x = int(x * self.multi_display_config.display_scaling)
+        y = int(y * self.multi_display_config.display_scaling)
+        
+        return x, y

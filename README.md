@@ -128,6 +128,23 @@ llm:
 - Убедитесь что Disco Elysium запущена
 - Проверьте логи: `tail logs/disco_coop.log`
 
+### Проблемы с координатами (внешний дисплей)
+Если Steam Deck подключен к внешнему монитору:
+
+```bash
+# Протестируйте определение дисплеев
+./tools/test-multidisplay.py
+
+# Настройте мультидисплей в config.yaml
+game:
+  multi_display:
+    auto_detect_game_screen: true  # Автоопределение экрана с игрой
+    prefer_external_display: true  # Предпочитать внешний дисплей
+    coordinate_offset:             # Ручное смещение если нужно
+      x: 1920  # Смещение для второго монитора 1920px
+      y: 0
+```
+
 ### Медленная работа
 - Используйте внешний API вместо локальных моделей
 - DeepSeek: ~3 секунды vs Ollama: ~60 секунд

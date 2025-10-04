@@ -27,13 +27,37 @@ find_game_window() {
     return 1
 }
 
+# Определяем информацию о дисплеях
+detect_displays() {
+    if command -v xrandr &> /dev/null; then
+        echo "🖥️  Обнаруженные дисплеи:"
+        xrandr --listmonitors | tail -n +2 | while read -r line; do
+            if [ -n "$line" ]; then
+                display_name=$(echo "$line" | awk '{print $NF}')
+                geometry=$(echo "$line" | awk '{print $3}')
+                echo "  - $display_name: $geometry"
+            fi
+        done
+    fi
+}
+
 # Steam Deck Desktop Mode - используем Spectacle
 if command -v spectacle &> /dev/null; then
+    # Показываем информацию о дисплеях для отладки
+    detect_displays
+    
     # Сначала ищем окно игры
     WINDOW_ID=$(find_game_window)
     
     if [ -n "$WINDOW_ID" ]; then
         echo "🎮 Скриншот окна игры (ID: $WINDOW_ID)"
+        
+        # Получаем геометрию окна для отладки
+        if command -v xdotool &> /dev/null; then
+            WINDOW_GEOMETRY=$(xdotool getwindowgeometry "$WINDOW_ID" 2>/dev/null || echo "Geometry: unknown")
+            echo "📐 $WINDOW_GEOMETRY"
+        fi
+        
         # Активируем окно и делаем скриншот
         xdotool windowactivate "$WINDOW_ID" 2>/dev/null || true
         sleep 0.2
