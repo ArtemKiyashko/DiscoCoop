@@ -553,6 +553,15 @@ class GameController:
         """
         original_x, original_y = x, y
         
+        # Применяем коррекцию для точности LLM
+        # LLM часто промахивается и целится чуть правее и ниже центра кнопок
+        llm_correction_x = self.multi_display_config.llm_coordinate_correction['x']
+        llm_correction_y = self.multi_display_config.llm_coordinate_correction['y']
+        if llm_correction_x != 0 or llm_correction_y != 0:
+            x += llm_correction_x
+            y += llm_correction_y
+            print(f"🧠 Применена коррекция LLM: {llm_correction_x:+d}{llm_correction_y:+d}")
+        
         # Если автоопределение включено, получаем информацию о дисплее
         if self.multi_display_config.auto_detect_game_screen:
             if self.game_display_info is None:

@@ -67,14 +67,28 @@ async def quick_coordinate_test():
                 x = int(x_str.strip())
                 y = int(y_str.strip())
                 
+                # Проверяем границы координат
+                max_x, max_y = optimized.size
+                if x < 0 or x >= max_x or y < 0 or y >= max_y:
+                    print(f"⚠️  Координаты ({x}, {y}) выходят за границы изображения {optimized.size}")
+                
                 # Создаем изображение с отмеченной точкой
                 test_image = optimized.copy()
                 draw = ImageDraw.Draw(test_image)
                 
-                # Рисуем крестик
+                print(f"🎯 Рисуем крестик точно в координатах ({x}, {y})")
+                
+                # Рисуем крестик (точные координаты)
                 cross_size = 15
                 draw.line([(x-cross_size, y), (x+cross_size, y)], fill='red', width=3)
                 draw.line([(x, y-cross_size), (x, y+cross_size)], fill='red', width=3)
+                
+                # Добавляем точку в центре для точности
+                dot_size = 2
+                draw.ellipse([
+                    (x-dot_size, y-dot_size), 
+                    (x+dot_size, y+dot_size)
+                ], fill='blue', outline='blue')
                 
                 # Рисуем круг
                 circle_radius = 25
@@ -82,6 +96,16 @@ async def quick_coordinate_test():
                     (x-circle_radius, y-circle_radius), 
                     (x+circle_radius, y+circle_radius)
                 ], outline='red', width=2)
+                
+                # Добавляем подпись с координатами
+                try:
+                    from PIL import ImageFont
+                    font = ImageFont.load_default()
+                    coord_text = f"({x},{y})"
+                    draw.text((x+30, y-10), coord_text, fill='white', font=font)
+                    draw.text((x+31, y-9), coord_text, fill='red', font=font)  # Тень для читаемости
+                except:
+                    pass
                 
                 test_filename = f"test_coords_{x}_{y}.png"
                 test_image.save(test_filename)
