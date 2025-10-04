@@ -31,31 +31,55 @@ class LLMAgent:
         return self.session
     
     async def is_available(self) -> bool:
+        """Проверка доступности LLM сервиса"""
+        provider = self.config.llm.provider.lower()
+        
+        if provider == "ollama":
+            return await self._check_ollama_availability()
+        elif provider in ["openai", "deepseek", "anthropic"]:
+            return await self._check_external_api_availability()
+        else:
+            print(f"❌ Неизвестный провайдер: {provider}")
+            return False
+    
+    async def _check_ollama_availability(self) -> bool:
         """Проверка доступности Ollama"""
         try:
             session = await self._get_session()
             async with session.get(f"{self.base_url}/api/tags") as response:
                 if response.status == 200:
-                    # Проверяем доступные модели
                     models_data = await response.json()
                     available_models = [model['name'] for model in models_data.get('models', [])]
-                    print(f"🤖 Доступные модели: {available_models}")
+                    print(f"🤖 Доступные Ollama модели: {available_models}")
                     
                     if self.model not in available_models:
                         print(f"❌ Модель {self.model} не найдена!")
                         print(f"💡 Загрузите модель: ollama pull {self.model}")
                         return False
                     
-                    if self.vision_model not in available_models:
-                        print(f"⚠️ Vision модель {self.vision_model} не найдена!")
-                        print(f"💡 Загрузите модель: ollama pull {self.vision_model}")
-                        print(f"💡 Или используйте fallback на основную модель")
-                        # Не возвращаем False - система может работать без vision модели
-                    
                     return True
                 return False
         except Exception as e:
             print(f"❌ Ошибка проверки Ollama: {e}")
+            print(f"💡 Попробуйте внешний API для ускорения работы")
+            return False
+    
+    async def _check_external_api_availability(self) -> bool:
+        """Проверка доступности внешнего API"""
+        try:
+            api_key = getattr(self.config.llm, 'api_key', None)
+            if not api_key:
+                print(f"❌ API ключ не найден для {self.config.llm.provider}")
+                print(f"💡 Добавьте api_key в конфигурацию")
+                return False
+            
+            print(f"✅ {self.config.llm.provider} API настроен")
+            print(f"🤖 Модель: {self.model}")
+            print(f"👁️ Vision модель: {self.vision_model}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Ошибка проверки {self.config.llm.provider} API: {e}")
             return False
     
     async def test_model(self) -> bool:
@@ -186,11 +210,19 @@ class LLMAgent:
     
     async def _query_llm(self, prompt: str, screenshot: Optional[Image.Image] = None) -> Optional[Dict[str, Any]]:
         """Запрос к текстовой LLM"""
+        provider = self.config.llm.provider.lower()
+        
+        if provider == "openai" or provider == "deepseek" or provider == "anthropic":
+            return await self._query_openai_api(prompt)
+        else:
+            return await self._query_ollama_api(prompt)
+    
+    async def _query_ollama_api(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Запрос к локальной Ollama"""
         try:
             session = await self._get_session()
             
-            # Проверяем доступность модели
-            print(f"🤖 Отправляем запрос к модели: {self.model}")
+            print(f"🤖 Отправляем запрос к Ollama модели: {self.model}")
             
             payload = {
                 "model": self.model,
@@ -207,7 +239,7 @@ class LLMAgent:
                     return await response.json()
                 else:
                     error_text = await response.text()
-                    print(f"LLM API error {response.status}: {error_text}")
+                    print(f"Ollama API error {response.status}: {error_text}")
                     
         except Exception as e:
             error_type = type(e).__name__
@@ -215,21 +247,74 @@ class LLMAgent:
                 print(f"❌ Не удается подключиться к Ollama серверу ({self.base_url})")
                 print(f"💡 Проверьте что Ollama запущен: systemctl --user status ollama")
             elif "Timeout" in error_type:
-                print(f"❌ Таймаут при запросе к LLM: {e}")
-                print(f"💡 Попробуйте увеличить таймаут или проверить модель {self.model}")
-            elif "JSONDecodeError" in error_type:
-                print(f"❌ Ошибка декодирования JSON ответа: {e}")
+                print(f"❌ Таймаут при запросе к Ollama: {e}")
+                print(f"💡 Попробуйте внешний API: provider: 'openai' или 'deepseek'")
             else:
-                print(f"❌ Error querying LLM: {e}")
-                print(f"🔍 URL: {self.base_url}/api/generate")
-                print(f"🔍 Model: {self.model}")
+                print(f"❌ Error querying Ollama: {e}")
                 import traceback
                 traceback.print_exc()
         
         return None
     
+    async def _query_openai_api(self, prompt: str) -> Optional[Dict[str, Any]]:
+        """Запрос к OpenAI-совместимому API (OpenAI, DeepSeek, etc.)"""
+        try:
+            session = await self._get_session()
+            
+            print(f"🚀 Отправляем запрос к {self.config.llm.provider} модели: {self.model}")
+            
+            # Получаем API ключ и URL
+            api_key = getattr(self.config.llm, 'api_key', None)
+            if not api_key:
+                print(f"❌ API ключ не найден для {self.config.llm.provider}")
+                return None
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Формируем payload в формате OpenAI
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": self.config.llm.temperature,
+                "max_tokens": self.config.llm.max_tokens
+            }
+            
+            async with session.post(f"{self.base_url}/v1/chat/completions", 
+                                  json=payload, headers=headers) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    # Преобразуем в формат Ollama для совместимости
+                    if 'choices' in result and len(result['choices']) > 0:
+                        content = result['choices'][0]['message']['content']
+                        return {"response": content}
+                    return None
+                else:
+                    error_text = await response.text()
+                    print(f"{self.config.llm.provider} API error {response.status}: {error_text}")
+                    
+        except Exception as e:
+            print(f"❌ Error querying {self.config.llm.provider} API: {e}")
+            import traceback
+            traceback.print_exc()
+        
+        return None
+    
     async def _query_vision_llm(self, prompt: str, screenshot: Image.Image) -> Optional[Dict[str, Any]]:
         """Запрос к vision LLM для анализа изображений"""
+        provider = self.config.llm.provider.lower()
+        
+        if provider == "openai":
+            return await self._query_openai_vision_api(prompt, screenshot)
+        else:
+            return await self._query_ollama_vision_api(prompt, screenshot)
+    
+    async def _query_ollama_vision_api(self, prompt: str, screenshot: Image.Image) -> Optional[Dict[str, Any]]:
+        """Запрос к локальной Ollama vision модели"""
         try:
             # Конвертируем изображение в base64
             print(f"🖼️  Конвертируем изображение {screenshot.size} в base64...")
@@ -248,7 +333,7 @@ class LLMAgent:
                 "images": [img_base64],
                 "stream": False,
                 "options": {
-                    "temperature": 0.1,  # Низкая температура для более точного описания
+                    "temperature": 0.1,
                     "num_predict": 500
                 }
             }
@@ -258,17 +343,83 @@ class LLMAgent:
                     return await response.json()
                 else:
                     error_text = await response.text()
-                    print(f"Vision LLM API error {response.status}: {error_text}")
+                    print(f"Ollama Vision API error {response.status}: {error_text}")
                     
         except Exception as e:
             error_type = type(e).__name__
-            if "ClientConnectorError" in error_type:
-                print(f"❌ Не удается подключиться к Ollama серверу для vision модели")
-                print(f"💡 Убедитесь что модель {self.vision_model} загружена: ollama pull {self.vision_model}")
+            if "Timeout" in error_type:
+                print(f"❌ Таймаут при запросе к Ollama vision модели")
+                print(f"💡 Попробуйте внешний API: provider: 'openai'")
             else:
-                print(f"Error querying vision LLM: {e}")
+                print(f"Error querying Ollama vision: {e}")
                 import traceback
                 traceback.print_exc()
+        
+        return None
+    
+    async def _query_openai_vision_api(self, prompt: str, screenshot: Image.Image) -> Optional[Dict[str, Any]]:
+        """Запрос к OpenAI Vision API"""
+        try:
+            # Конвертируем изображение в base64
+            print(f"🖼️  Конвертируем изображение {screenshot.size} в base64...")
+            img_buffer = io.BytesIO()
+            screenshot.save(img_buffer, format='JPEG', quality=85)  # JPEG для меньшего размера
+            img_data = img_buffer.getvalue()
+            img_base64 = base64.b64encode(img_data).decode('utf-8')
+            
+            print(f"📏 Размер изображения: {len(img_data)} байт")
+            
+            session = await self._get_session()
+            
+            api_key = getattr(self.config.llm, 'api_key', None)
+            if not api_key:
+                print("❌ API ключ не найден для OpenAI")
+                return None
+            
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Формируем payload для vision API
+            payload = {
+                "model": self.vision_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{img_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "temperature": 0.1,
+                "max_tokens": 500
+            }
+            
+            print(f"🚀 Отправляем запрос к OpenAI Vision API...")
+            
+            async with session.post(f"{self.base_url}/v1/chat/completions", 
+                                  json=payload, headers=headers) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if 'choices' in result and len(result['choices']) > 0:
+                        content = result['choices'][0]['message']['content']
+                        return {"response": content}
+                    return None
+                else:
+                    error_text = await response.text()
+                    print(f"OpenAI Vision API error {response.status}: {error_text}")
+                    
+        except Exception as e:
+            print(f"❌ Error querying OpenAI Vision API: {e}")
+            import traceback
+            traceback.print_exc()
         
         return None
     

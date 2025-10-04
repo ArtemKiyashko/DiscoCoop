@@ -9,12 +9,29 @@ telegram:
     - 987654321
 
 llm:
-  provider: "ollama"  # ollama, openai, anthropic
+  provider: "ollama"  # ollama, openai, deepseek, anthropic
   model: "llama3.1:8b"  # Модель для обработки команд
   vision_model: "llava:7b"  # Модель для анализа изображений
-  base_url: "http://localhost:11434"  # URL Ollama сервера
+  base_url: "http://localhost:11434"  # URL сервера
+  api_key: ""  # API ключ для внешних провайдеров (не нужен для ollama)
   max_tokens: 2048
   temperature: 0.7
+  
+  # Примеры конфигураций для разных провайдеров:
+  
+  # OpenAI:
+  # provider: "openai"
+  # model: "gpt-4o-mini"
+  # vision_model: "gpt-4o"
+  # base_url: "https://api.openai.com"
+  # api_key: "sk-your-openai-key-here"
+  
+  # DeepSeek (быстро и дешево):
+  # provider: "deepseek"
+  # model: "deepseek-chat"
+  # vision_model: "gpt-4o"  # DeepSeek пока без vision, используем OpenAI
+  # base_url: "https://api.deepseek.com"
+  # api_key: "sk-your-deepseek-key-here"
   system_prompt: |
     Ты помощник для игры в Disco Elysium. Твоя задача - интерпретировать команды игроков 
     на русском языке и преобразовывать их в конкретные игровые действия.
