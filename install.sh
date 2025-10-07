@@ -223,52 +223,12 @@ install_project() {
     
     # Устанавливаем зависимости Python
     if [ -f "requirements.txt" ]; then
-        log_info "Устанавливаем основные зависимости из requirements.txt..."
-        # Сначала устанавливаем основные пакеты без проблемных
-        pip install \
-            "python-telegram-bot>=22.0" \
-            "aiohttp>=3.8.0" \
-            "pyyaml>=6.0" \
-            "loguru>=0.7.0" \
-            "Pillow>=9.0.0" \
-            "requests>=2.28.0" \
-            "opencv-python-headless>=4.5.0" \
-            "numpy>=1.20.0" \
-            "six>=1.16.0"
-            
-        # Пытаемся установить проблемные пакеты отдельно
-        log_info "Устанавливаем игровые контроллеры..."
-        
-        # Устанавливаем базовые зависимости для PyAutoGUI
-        pip install "pillow" "python3-xlib" || true
-        
-        # Устанавливаем PyAutoGUI без evdev (только базовые зависимости)
-        if pip install --no-deps "PyAutoGUI>=0.9.50"; then
-            log_success "PyAutoGUI установлен (без evdev)"
-        else
-            log_warning "PyAutoGUI не удалось установить - игровой ввод будет недоступен"
-        fi
-        
-        if pip install "pynput>=1.7.0"; then
-            log_success "pynput установлен"
-        else
-            log_warning "pynput не удалось установить - некоторые функции будут недоступны"
-        fi
+        log_info "Устанавливаем зависимости из requirements.txt..."
+        pip install -r requirements.txt
+        log_success "Все зависимости установлены"
     else
-        log_info "Устанавливаем базовые зависимости..."
-        pip install \
-            "python-telegram-bot>=22.0" \
-            "aiohttp" \
-            "pillow" \
-            "requests" \
-            "loguru" \
-            "pyyaml"
-            
-        # Пытаемся установить проблемные пакеты отдельно
-        log_info "Устанавливаем игровые контроллеры..."
-        pip install "python3-xlib" || true
-        pip install --no-deps "PyAutoGUI" || log_warning "PyAutoGUI не удалось установить"
-        pip install "pynput" || log_warning "pynput не удалось установить"
+        log_error "requirements.txt не найден!"
+        exit 1
     fi
     
     # Создаем конфигурационный файл если его нет
