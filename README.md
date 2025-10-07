@@ -132,9 +132,6 @@ llm:
 Если Steam Deck подключен к внешнему монитору:
 
 ```bash
-# Протестируйте определение дисплеев
-./tools/test-multidisplay.py
-
 # Настройте мультидисплей в config.yaml
 game:
   multi_display:
