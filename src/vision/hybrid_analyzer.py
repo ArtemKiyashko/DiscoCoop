@@ -43,10 +43,14 @@ class HybridScreenAnalyzer:
             )
             
             if precise_coords:
+                action_desc = screen_analysis.get('action_description', 'Выполнил игровое действие')
+                print(f"🎯 Найдены координаты: ({precise_coords[0]}, {precise_coords[1]}) для: {action_desc}")
+                
                 return {
                     'method': 'hybrid',
                     'analysis': screen_analysis,
                     'coordinates': precise_coords,
+                    'action_description': action_desc,
                     'success': True
                 }
         
@@ -61,6 +65,9 @@ class HybridScreenAnalyzer:
             }
         
         # 4. Ничего не найдено
+        targets_text = ', '.join([f"'{t.get('text', '')}'" for t in screen_analysis.get('search_targets', [])])
+        print(f"❌ Элементы не найдены на экране: {targets_text}")
+        
         return {
             'method': 'failed',
             'analysis': screen_analysis,
@@ -78,6 +85,7 @@ class HybridScreenAnalyzer:
             return {
                 'analysis': result.get('analysis', ''),
                 'search_targets': result.get('search_targets', []),
+                'action_description': result.get('action_description', 'Выполняю игровое действие'),
                 'coordinates': None  # LLM больше не возвращает координаты
             }
         

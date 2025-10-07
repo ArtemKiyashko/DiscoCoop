@@ -166,6 +166,14 @@ class LLMAgent:
             try:
                 result = json.loads(response_text)
                 result['success'] = True
+                
+                # Логируем команду LLM
+                action_desc = result.get('action_description', 'Неизвестное действие')
+                search_targets = result.get('search_targets', [])
+                targets_text = ', '.join([f"'{t.get('text', '')}'" for t in search_targets])
+                print(f"🧠 LLM команда: {action_desc}")
+                print(f"🔍 Поисковые цели: {targets_text}")
+                
                 return result
             except (json.JSONDecodeError, ValueError):
                 print(f"Ошибка парсинга JSON от LLM: {response_text}")

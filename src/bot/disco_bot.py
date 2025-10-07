@@ -2,6 +2,7 @@
 Telegram Bot для управления игрой Disco Elysium
 """
 import asyncio
+import io
 import json
 import time
 from typing import Dict, List, Optional
@@ -340,29 +341,52 @@ class DiscoCoopBot:
                 coordinates = hybrid_result.get('coordinates')
                 
                 if coordinates:
+                    # Получаем литературное описание действия от LLM
+                    action_description = hybrid_result.get('action_description', 'Выполняю игровое действие')
+                    
                     # Создаем действие клика с точными координатами
                     actions = [{
                         'type': 'click',
                         'x': coordinates[0],
                         'y': coordinates[1],
-                        'description': f'Клик по найденному элементу ({method})'
+                        'description': action_description
                     }]
                     
                     # Выполняем действие
                     success = await self.game_controller.execute_actions(actions)
                     
                     if success:
-                        response = f"✅ Команда выполнена ({method} координаты)"
+                        # Делаем скриншот после выполнения действия
+                        await asyncio.sleep(0.5)  # Небольшая пауза для обновления экрана
+                        result_screenshot = await self.screen_analyzer.take_screenshot()
+                        
+                        # Отправляем результат с описанием и скриншотом
+                        response = f"✅ {action_description}"
+                        
+                        if result_screenshot:
+                            # Конвертируем скриншот в PNG для отправки
+                            img_buffer = io.BytesIO()
+                            result_screenshot.save(img_buffer, format='PNG')
+                            img_buffer.seek(0)
+                            
+                            await processing_msg.edit_text(response)
+                            await context.bot.send_photo(
+                                chat_id=update.effective_chat.id,
+                                photo=img_buffer,
+                                caption="🎮 Результат действия"
+                            )
+                        else:
+                            await processing_msg.edit_text(response)
                     else:
-                        response = "⚠️ Команда выполнена частично"
+                        response = f"⚠️ {action_description} (выполнено частично)"
+                        await processing_msg.edit_text(response)
                 else:
                     response = "❓ Элемент найден, но координаты недоступны"
+                    await processing_msg.edit_text(response)
             else:
                 # Гибридный анализатор не смог найти элемент
                 response = "❓ Элемент не найден на экране. Попробуйте переформулировать команду."
-            
-            # Обновляем сообщение с результатом
-            await processing_msg.edit_text(response)
+                await processing_msg.edit_text(response)
             
         except Exception as e:
             logger.error(f"Error processing command '{user_command}': {e}")
