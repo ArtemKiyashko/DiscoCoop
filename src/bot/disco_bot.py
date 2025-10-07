@@ -205,8 +205,8 @@ class DiscoCoopBot:
                 await update.message.reply_text("❌ Не удалось получить скриншот. Убедитесь, что игра запущена.")
                 return
             
-            # Анализируем скриншот
-            description = await self.screen_analyzer.describe_screen()
+            # Анализируем скриншот (передаем уже существующий)
+            description = await self.screen_analyzer.describe_screen(screenshot)
             
             if description:
                 # Отправляем скриншот с описанием

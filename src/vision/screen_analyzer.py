@@ -99,15 +99,19 @@ class ScreenAnalyzer:
                 return None
     
 
-    async def describe_screen(self) -> Optional[str]:
+    async def describe_screen(self, screenshot: Optional[Image.Image] = None) -> Optional[str]:
         """
         Получение описания того, что происходит на экране
+        
+        Args:
+            screenshot: Готовый скриншот (если None, будет создан новый)
         
         Returns:
             Текстовое описание экрана или None при ошибке
         """
         try:
-            screenshot = await self.take_screenshot()
+            if screenshot is None:
+                screenshot = await self.take_screenshot()
             
             if not screenshot:
                 return "Не удалось получить скриншот экрана"
