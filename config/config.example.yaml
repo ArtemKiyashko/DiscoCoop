@@ -16,32 +16,30 @@ telegram:
     - 987654321
 
 llm:
-  # 🎯 ДЛЯ МАКСИМАЛЬНОЙ ТОЧНОСТИ КООРДИНАТ раскомментируйте Claude:
-  provider: "anthropic"
-  model: "claude-3-5-sonnet-20241022"
-  vision_model: "claude-3-5-sonnet-20241022"
-  base_url: "https://api.anthropic.com"
-  api_key: "YOUR_ANTHROPIC_API_KEY_HERE"
+  # 🎯 РЕКОМЕНДОВАННАЯ КОНФИГУРАЦИЯ - OpenAI GPT-4o для точности:
+  provider: "openai"
+  model: "gpt-4o-mini"
+  vision_model: "gpt-4o"
+  base_url: "https://api.openai.com/v1"
+  api_key: "YOUR_OPENAI_API_KEY_HERE"
   max_tokens: 2048
   temperature: 0.1
 
-  # Альтернативная конфигурация (локальная, медленная):
-  # provider: "ollama"  # ollama, openai, deepseek, anthropic
-  # model: "llama3.1:8b"  # Модель для обработки команд
-  # vision_model: "llava:7b"  # Модель для анализа изображений
-  # base_url: "http://localhost:11434"  # URL сервера
-  # api_key: ""  # API ключ для внешних провайдеров (не нужен для ollama)
-  # max_tokens: 2048
-  # temperature: 0.1  # Понизили для большей точности
+  # Альтернативные конфигурации:
   
-  # Примеры конфигураций для разных провайдеров:
+  # Anthropic Claude (отличный анализ UI):
+  # provider: "anthropic"
+  # model: "claude-3-5-sonnet-20241022"
+  # vision_model: "claude-3-5-sonnet-20241022"
+  # base_url: "https://api.anthropic.com"
+  # api_key: "YOUR_ANTHROPIC_API_KEY_HERE"
   
-  # OpenAI (рекомендуется для точности):
-  # provider: "openai"
-  # model: "gpt-4o"  # Полная версия, лучше анализирует изображения
-  # vision_model: "gpt-4o"
-  # base_url: "https://api.openai.com"
-  # api_key: "sk-your-openai-key-here"
+  # Ollama (локальная, медленная):
+  # provider: "ollama"
+  # model: "llama3.1:8b"
+  # vision_model: "llava:7b"
+  # base_url: "http://localhost:11434"
+  # api_key: ""
   
   # Anthropic Claude (отличный анализ изображений):
   # provider: "anthropic"
