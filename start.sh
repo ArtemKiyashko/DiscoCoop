@@ -56,23 +56,32 @@ else
     exit 1
 fi
 
-# Проверяем Ollama
-log_info "Проверка Ollama сервера..."
-if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
-    log_error "Ollama сервер недоступен!"
-    echo "🚀 Запустите Ollama:"
-    if [ -x "$OLLAMA_DIR/bin/ollama" ]; then
-        echo "   $OLLAMA_DIR/bin/ollama serve &"
-    elif command -v ollama &> /dev/null; then
-        echo "   ollama serve &" 
+# Проверяем нужен ли Ollama (только если провайдер "ollama")
+if [ -f "config/config.yaml" ]; then
+    PROVIDER=$(grep -E '^\s*provider:' config/config.yaml | sed 's/.*"\(.*\)".*/\1/')
+    if [ "$PROVIDER" = "ollama" ]; then
+        log_info "Проверка Ollama сервера (провайдер: ollama)..."
+        if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+            log_error "Ollama сервер недоступен!"
+            echo "🚀 Запустите Ollama:"
+            if [ -x "$OLLAMA_DIR/bin/ollama" ]; then
+                echo "   $OLLAMA_DIR/bin/ollama serve &"
+            elif command -v ollama &> /dev/null; then
+                echo "   ollama serve &" 
+            else
+                echo "💡 Запустите установку: ./install.sh"
+                exit 1
+            fi
+            echo "   Или как сервис: systemctl --user start ollama"
+            exit 1
+        else
+            log_success "Ollama сервер доступен"
+        fi
     else
-        echo "💡 Запустите установку: ./install.sh"
-        exit 1
+        log_info "Используется внешний LLM провайдер: $PROVIDER (Ollama не требуется)"
     fi
-    echo "   Или как сервис: systemctl --user start ollama"
-    exit 1
 else
-    log_success "Ollama сервер доступен"
+    log_warning "config/config.yaml не найден - пропускаем проверку Ollama"
 fi
 
 # Проверяем установленные пакеты
