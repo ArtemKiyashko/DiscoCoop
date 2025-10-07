@@ -159,6 +159,71 @@ class LLMAgent:
             print(f"Error processing command: {e}")
             return None
     
+    async def analyze_for_elements(self, screenshot: Image.Image, command: str) -> Optional[Dict[str, Any]]:
+        """
+        Анализ экрана для поиска элементов (используется гибридным анализатором)
+        
+        Args:
+            screenshot: Скриншот для анализа
+            command: Команда пользователя
+            
+        Returns:
+            Словарь с анализом и поисковыми целями
+        """
+        try:
+            width, height = screenshot.size
+            
+            analysis_prompt = f"""
+Команда пользователя: "{command}"
+
+ЗАДАЧА: Проанализируй скриншот игры Disco Elysium ({width}x{height} пикселей) и определи что нужно найти для выполнения команды.
+
+НЕ ГЕНЕРИРУЙ ДЕЙСТВИЯ! Только определи что искать на экране.
+
+Верни JSON со следующими полями:
+{{
+    "analysis": "краткое описание что видно на экране",
+    "search_targets": [
+        {{
+            "text": "текст для поиска на экране",
+            "type": "button|text|dialogue|menu",
+            "description": "описание элемента"
+        }}
+    ],
+    "reasoning": "объяснение логики поиска"
+}}
+
+ПРИМЕРЫ поисковых целей:
+- Для "новая игра" → {{"text": "Новая игра", "type": "button"}}
+- Для "продолжить" → {{"text": "Продолжить", "type": "button"}}  
+- Для выбора диалога → {{"text": "текст варианта", "type": "dialogue"}}
+"""
+            
+            response = await self._query_vision_llm(analysis_prompt, screenshot)
+            
+            if not response:
+                return None
+            
+            # Парсим ответ (ожидаем JSON)
+            response_text = response.get('response', '') if 'response' in response else str(response)
+            
+            try:
+                result = json.loads(response_text)
+                result['success'] = True
+                return result
+            except (json.JSONDecodeError, ValueError):
+                print(f"Ошибка парсинга JSON от LLM: {response_text}")
+                return {
+                    'analysis': 'JSON parsing failed',
+                    'search_targets': [],
+                    'reasoning': f'LLM response: {response_text}',
+                    'success': False
+                }
+                
+        except Exception as e:
+            print(f"Error analyzing for elements: {e}")
+            return None
+
     async def describe_screen(self, screenshot: Image.Image) -> Optional[str]:
         """
         Описание содержимого экрана

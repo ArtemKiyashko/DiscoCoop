@@ -70,48 +70,20 @@ class HybridScreenAnalyzer:
     
     async def _analyze_screen_elements(self, screenshot: Image.Image, command: str) -> Dict[str, Any]:
         """LLM анализирует скриншот и определяет объекты для поиска"""
-        # Получаем анализ от LLM
-        result = await self.llm_agent.process_command(command, screenshot)
+        # Используем специальный метод для анализа элементов
+        result = await self.llm_agent.analyze_for_elements(screenshot, command)
         
         # Обрабатываем результат
         if result and result.get('success'):
             return {
-                'analysis': result.get('reasoning', ''),
-                'search_targets': self._extract_search_targets(result),
-                'coordinates': result.get('coordinates')
+                'analysis': result.get('analysis', ''),
+                'search_targets': result.get('search_targets', []),
+                'coordinates': None  # LLM больше не возвращает координаты
             }
         
         return {'analysis': 'LLM analysis failed', 'search_targets': [], 'coordinates': None}
     
-    def _extract_search_targets(self, llm_result: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Извлекает объекты для поиска из результата LLM"""
-        search_targets = []
-        
-        # Пытаемся извлечь текст кнопки или элемента
-        action = llm_result.get('action')
-        if action and isinstance(action, str):
-            # Простая эвристика: ищем текст в кавычках или после ключевых слов
-            if 'кнопку' in action.lower() or 'button' in action.lower():
-                # Пытаемся найти текст кнопки
-                import re
-                matches = re.findall(r'["\'](.+?)["\']', action)
-                if matches:
-                    search_targets.append({
-                        'text': matches[0],
-                        'type': 'button',
-                        'description': f'Кнопка: {matches[0]}'
-                    })
-        
-        # Добавляем дополнительные цели из reasoning
-        reasoning = llm_result.get('reasoning', '')
-        if 'диалог' in reasoning.lower() or 'dialogue' in reasoning.lower():
-            search_targets.append({
-                'text': 'dialogue',  
-                'type': 'dialogue',
-                'description': 'Диалоговое окно'
-            })
-        
-        return search_targets
+
     
     async def _find_precise_coordinates(self, screenshot: Image.Image, search_targets: List[Dict[str, Any]]) -> Optional[Tuple[int, int]]:
         """Использует детектор для поиска точных координат"""
