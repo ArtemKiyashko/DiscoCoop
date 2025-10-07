@@ -22,6 +22,7 @@ from loguru import logger
 from ..utils.config import Config
 from ..llm.agent import LLMAgent
 from ..vision.screen_analyzer import ScreenAnalyzer
+from ..vision.hybrid_analyzer import HybridScreenAnalyzer
 from ..game.controller import GameController
 
 
@@ -32,6 +33,7 @@ class DiscoCoopBot:
         self.config = config
         self.llm_agent = LLMAgent(config)
         self.screen_analyzer = ScreenAnalyzer(config)
+        self.hybrid_analyzer = HybridScreenAnalyzer(config)
         self.game_controller = GameController(config)
         
         # Статистика и контроль доступа
@@ -322,22 +324,52 @@ class DiscoCoopBot:
         processing_msg = await update.message.reply_text("🎮 Выполняю команду...")
         
         try:
-            # Получаем текущий скриншот для контекста
+            # Получаем текущий скриншот
             screenshot = await self.screen_analyzer.take_screenshot()
             
-            # Обрабатываем команду через LLM
-            result = await self.llm_agent.process_command(user_command, screenshot)
+            if not screenshot:
+                await processing_msg.edit_text("❌ Не удалось получить скриншот игры")
+                return
             
-            if result and result.get('actions'):
-                # Выполняем действия в игре
-                success = await self.game_controller.execute_actions(result['actions'])
+            # Используем гибридный анализатор для получения точных координат
+            hybrid_result = await self.hybrid_analyzer.analyze_and_find_element(screenshot, user_command)
+            
+            if hybrid_result and hybrid_result.get('success'):
+                # Гибридный анализатор нашел элемент с точными координатами
+                method = hybrid_result.get('method', 'unknown')
+                coordinates = hybrid_result.get('coordinates')
                 
-                if success:
-                    response = f"✅ {result.get('description', 'Команда выполнена')}"
+                if coordinates:
+                    # Создаем действие клика с точными координатами
+                    actions = [{
+                        'type': 'click',
+                        'x': coordinates[0],
+                        'y': coordinates[1],
+                        'description': f'Клик по найденному элементу ({method})'
+                    }]
+                    
+                    # Выполняем действие
+                    success = await self.game_controller.execute_actions(actions)
+                    
+                    if success:
+                        response = f"✅ Команда выполнена ({method} координаты)"
+                    else:
+                        response = "⚠️ Команда выполнена частично"
                 else:
-                    response = "⚠️ Команда выполнена частично или с ошибками"
+                    response = "❓ Элемент найден, но координаты недоступны"
             else:
-                response = "❓ Не удалось понять команду. Попробуйте переформулировать."
+                # Fallback: используем стандартный LLM подход
+                result = await self.llm_agent.process_command(user_command, screenshot)
+                
+                if result and result.get('actions'):
+                    success = await self.game_controller.execute_actions(result['actions'])
+                    
+                    if success:
+                        response = f"✅ {result.get('description', 'Команда выполнена (LLM)')}"
+                    else:
+                        response = "⚠️ Команда выполнена частично"
+                else:
+                    response = "❓ Не удалось понять команду. Попробуйте переформулировать."
             
             # Обновляем сообщение с результатом
             await processing_msg.edit_text(response)

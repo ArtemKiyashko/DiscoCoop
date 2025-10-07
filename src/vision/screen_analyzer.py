@@ -3,7 +3,7 @@
 """
 import asyncio
 import platform
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from PIL import Image, ImageGrab
 import cv2
 import numpy as np
@@ -21,6 +21,15 @@ class ScreenAnalyzer:
         self.window_title = config.game.window_title
         self.last_screenshot = None
         self.last_screenshot_time = 0
+        
+        # Инициализируем детектор элементов
+        try:
+            from .element_detector import GameElementDetector
+            self.element_detector = GameElementDetector()
+            print("✅ Детектор элементов инициализирован в ScreenAnalyzer")
+        except Exception as e:
+            print(f"⚠️ Детектор элементов недоступен в ScreenAnalyzer: {e}")
+            self.element_detector = None
     
     async def take_screenshot(self) -> Optional[Image.Image]:
         """
@@ -320,6 +329,43 @@ class ScreenAnalyzer:
                     })
         
         return dialogs
+    
+    async def find_element_precise(self, target: str) -> Optional[Dict[str, Any]]:
+        """
+        Поиск элемента с точными координатами через детектор
+        
+        Args:
+            target: Название элемента для поиска
+            
+        Returns:
+            Информация об элементе с точными координатами
+        """
+        if not self.element_detector:
+            print("⚠️ Детектор элементов недоступен")
+            return None
+        
+        try:
+            # Делаем скриншот
+            screenshot = await self.take_screenshot()
+            if not screenshot:
+                return None
+            
+            # Используем детектор для поиска
+            element = self.element_detector.find_element(screenshot, target)
+            
+            if element:
+                return {
+                    'coordinates': (element.center_x, element.center_y),
+                    'description': f"Элемент {target}",
+                    'method': element.method,
+                    'confidence': element.confidence
+                }
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Ошибка поиска элемента '{target}': {e}")
+            return None
     
     async def close(self):
         """Закрытие ресурсов"""

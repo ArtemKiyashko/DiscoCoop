@@ -126,16 +126,35 @@ class LLMAgent:
     
     async def process_command(self, user_command: str, screenshot: Optional[Image.Image] = None) -> Optional[Dict[str, Any]]:
         """
-        Обработка команды пользователя и генерация игровых действий
+        Обработка команды пользователя с использованием гибридного подхода
         
         Args:
             user_command: Команда пользователя на естественном языке
             screenshot: Скриншот экрана для контекста
             
         Returns:
-            Словарь с действиями и описанием или None при ошибке
+            Словарь с действиями и точными координатами или None при ошибке
         """
         try:
+            # Попытка использовать гибридный анализатор для точных координат
+            try:
+                from ..vision.hybrid_analyzer import HybridScreenAnalyzer
+                hybrid_analyzer = HybridScreenAnalyzer(self.config)
+                result = await hybrid_analyzer.analyze_and_find_element(user_command)
+                
+                if result:
+                    print("✅ Использован гибридный анализатор (LLM + Универсальный детектор)")
+                    await hybrid_analyzer.close()
+                    return result
+                    
+                await hybrid_analyzer.close()
+                
+            except Exception as hybrid_error:
+                print(f"⚠️  Гибридный анализатор недоступен: {hybrid_error}")
+            
+            # Fallback на старый метод с LLM координатами
+            print("⚠️  Используем fallback с LLM координатами")
+            
             # Формируем промпт с контекстом
             context_prompt = self._build_command_prompt(user_command, screenshot)
             
@@ -146,7 +165,11 @@ class LLMAgent:
                 return None
             
             # Парсим ответ
-            return self._parse_llm_response(response)
+            result = self._parse_llm_response(response)
+            if result:
+                result['method'] = 'llm_fallback'
+            
+            return result
             
         except Exception as e:
             print(f"Error processing command: {e}")
