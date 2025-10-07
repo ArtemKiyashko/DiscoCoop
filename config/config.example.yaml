@@ -54,19 +54,31 @@ llm:
   # vision_model: "gpt-4o"  # DeepSeek пока без vision, используем OpenAI
   # base_url: "https://api.deepseek.com"
   # api_key: "sk-your-deepseek-key-here"
-  system_prompt: |
-    Ты помощник для игры в Disco Elysium. Твоя задача - интерпретировать команды игроков 
-    на русском языке и преобразовывать их в конкретные игровые действия.
-    
-    Доступные действия:
-    - move_mouse(x, y) - переместить курсор
-    - click(x, y) - кликнуть в точку
-    - key_press(key) - нажать клавишу
-    - type_text(text) - ввести текст
-    - scroll(direction, amount) - прокрутить
-    
-    Отвечай только JSON с действиями. Пример:
-    {"actions": [{"type": "click", "x": 400, "y": 300}], "description": "Кликнул на дверь"}
+  analysis_prompt: |
+    Команда пользователя: "{command}"
+
+    ЗАДАЧА: Проанализируй скриншот игры Disco Elysium и определи что нужно найти для выполнения команды.
+
+    НЕ ГЕНЕРИРУЙ ДЕЙСТВИЯ! Только определи что искать на экране.
+
+    ВАЖНО: Отвечай ТОЛЬКО валидным JSON без markdown разметки!
+
+    Верни JSON со следующими полями:
+    {{
+        "analysis": "краткое описание что видно на экране",
+        "search_targets": [
+            {{
+                "text": "текст для поиска на экране",
+                "type": "button|text|dialogue|menu",
+                "description": "описание элемента"
+            }}
+        ]
+    }}
+
+    ПРИМЕРЫ поисковых целей:
+    - Для "новая игра" → {{"text": "Новая игра", "type": "button"}}
+    - Для "продолжить" → {{"text": "Продолжить", "type": "button"}}  
+    - Для выбора диалога → {{"text": "текст варианта", "type": "dialogue"}}
 
 game:
   window_title: "Disco Elysium"

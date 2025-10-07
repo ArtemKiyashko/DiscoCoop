@@ -26,7 +26,7 @@ class LLMConfig:
     api_key: str
     max_tokens: int
     temperature: float
-    system_prompt: str
+    analysis_prompt: str
 
 
 @dataclass

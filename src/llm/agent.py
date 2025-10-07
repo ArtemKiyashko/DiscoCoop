@@ -124,40 +124,7 @@ class LLMAgent:
                 print(f"❌ Ошибка тестирования модели: {e}")
             return False
     
-    async def process_command(self, user_command: str, screenshot: Optional[Image.Image] = None) -> Optional[Dict[str, Any]]:
-        """
-        Обработка команды пользователя с использованием гибридного подхода
-        
-        Args:
-            user_command: Команда пользователя на естественном языке
-            screenshot: Скриншот экрана для контекста
-            
-        Returns:
-            Словарь с действиями и точными координатами или None при ошибке
-        """
-        try:
-            # Используем только прямой анализ LLM (без гибридного детектора здесь)
-            # Гибридный анализатор должен вызываться из bot.py с переданным скриншотом
-            
-            # Формируем промпт с контекстом
-            context_prompt = self._build_command_prompt(user_command, screenshot)
-            
-            # Отправляем запрос к LLM
-            response = await self._query_llm(context_prompt, screenshot)
-            
-            if not response:
-                return None
-            
-            # Парсим ответ
-            result = self._parse_llm_response(response)
-            if result:
-                result['method'] = 'llm_fallback'
-            
-            return result
-            
-        except Exception as e:
-            print(f"Error processing command: {e}")
-            return None
+
     
     async def analyze_for_elements(self, screenshot: Image.Image, command: str) -> Optional[Dict[str, Any]]:
         """
@@ -173,31 +140,8 @@ class LLMAgent:
         try:
             width, height = screenshot.size
             
-            analysis_prompt = f"""
-Команда пользователя: "{command}"
-
-ЗАДАЧА: Проанализируй скриншот игры Disco Elysium ({width}x{height} пикселей) и определи что нужно найти для выполнения команды.
-
-НЕ ГЕНЕРИРУЙ ДЕЙСТВИЯ! Только определи что искать на экране.
-
-Верни JSON со следующими полями:
-{{
-    "analysis": "краткое описание что видно на экране",
-    "search_targets": [
-        {{
-            "text": "текст для поиска на экране",
-            "type": "button|text|dialogue|menu",
-            "description": "описание элемента"
-        }}
-    ],
-    "reasoning": "объяснение логики поиска"
-}}
-
-ПРИМЕРЫ поисковых целей:
-- Для "новая игра" → {{"text": "Новая игра", "type": "button"}}
-- Для "продолжить" → {{"text": "Продолжить", "type": "button"}}  
-- Для выбора диалога → {{"text": "текст варианта", "type": "dialogue"}}
-"""
+            # Используем промпт из конфигурации
+            analysis_prompt = self.config.llm.analysis_prompt.format(command=command)
             
             response = await self._query_vision_llm(analysis_prompt, screenshot)
             
@@ -206,6 +150,18 @@ class LLMAgent:
             
             # Парсим ответ (ожидаем JSON)
             response_text = response.get('response', '') if 'response' in response else str(response)
+            
+            # Очищаем от markdown разметки (```json ... ```)
+            if '```json' in response_text:
+                # Извлекаем JSON из markdown блока
+                start_marker = '```json'
+                end_marker = '```'
+                start_idx = response_text.find(start_marker)
+                if start_idx != -1:
+                    start_idx += len(start_marker)
+                    end_idx = response_text.find(end_marker, start_idx)
+                    if end_idx != -1:
+                        response_text = response_text[start_idx:end_idx].strip()
             
             try:
                 result = json.loads(response_text)
@@ -216,7 +172,6 @@ class LLMAgent:
                 return {
                     'analysis': 'JSON parsing failed',
                     'search_targets': [],
-                    'reasoning': f'LLM response: {response_text}',
                     'success': False
                 }
                 
@@ -262,37 +217,7 @@ class LLMAgent:
             print(f"Error describing screen: {e}")
             return None
     
-    def _build_command_prompt(self, user_command: str, screenshot: Optional[Image.Image] = None) -> str:
-        """Построение промпта для обработки команды"""
-        base_prompt = self.config.llm.system_prompt
-        
-        context = ""
-        if screenshot:
-            width, height = screenshot.size
-            context = f"\n\nНа экране сейчас видно игровое окно Disco Elysium размером {width}x{height} пикселей. ВНИМАТЕЛЬНО изучи изображение и найди нужные элементы интерфейса."
-        
-        user_prompt = f"""
-Команда пользователя: "{user_command}"
-{context}
 
-ВНИМАТЕЛЬНО изучи предоставленное изображение экрана игры Disco Elysium.
-
-ИНСТРУКЦИИ ПО ОПРЕДЕЛЕНИЮ КООРДИНАТ:
-1. Найди нужный элемент интерфейса (кнопку, текст, объект)
-2. Определи его точные границы на изображении
-3. Вычисли геометрический центр элемента
-4. Используй эти координаты для клика
-
-ПРИМЕРЫ АНАЛИЗА:
-- Если ищешь кнопку "Новая игра" - она обычно в центральной части экрана
-- Если ищешь вариант диалога - они слева, в вертикальном списке
-- Если ищешь элемент инвентаря - определи его позицию в сетке
-
-Проанализируй команду и сгенерируй соответствующие игровые действия с ТОЧНЫМИ координатами.
-Ответь строго в JSON формате без дополнительного текста.
-        """
-        
-        return base_prompt + user_prompt
     
     async def _query_llm(self, prompt: str, screenshot: Optional[Image.Image] = None) -> Optional[Dict[str, Any]]:
         """Запрос к текстовой LLM"""
