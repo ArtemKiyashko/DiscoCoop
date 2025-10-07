@@ -35,7 +35,6 @@ class MultiDisplayConfig:
     auto_detect_game_screen: bool
     prefer_external_display: bool
     coordinate_offset: Dict[str, int]
-    llm_coordinate_correction: Dict[str, int]  # Коррекция неточности LLM
     display_scaling: float
 
 

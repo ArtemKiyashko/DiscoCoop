@@ -136,24 +136,8 @@ class LLMAgent:
             Словарь с действиями и точными координатами или None при ошибке
         """
         try:
-            # Попытка использовать гибридный анализатор для точных координат
-            try:
-                from ..vision.hybrid_analyzer import HybridScreenAnalyzer
-                hybrid_analyzer = HybridScreenAnalyzer(self.config)
-                result = await hybrid_analyzer.analyze_and_find_element(user_command)
-                
-                if result:
-                    print("✅ Использован гибридный анализатор (LLM + Универсальный детектор)")
-                    await hybrid_analyzer.close()
-                    return result
-                    
-                await hybrid_analyzer.close()
-                
-            except Exception as hybrid_error:
-                print(f"⚠️  Гибридный анализатор недоступен: {hybrid_error}")
-            
-            # Fallback на старый метод с LLM координатами
-            print("⚠️  Используем fallback с LLM координатами")
+            # Используем только прямой анализ LLM (без гибридного детектора здесь)
+            # Гибридный анализатор должен вызываться из bot.py с переданным скриншотом
             
             # Формируем промпт с контекстом
             context_prompt = self._build_command_prompt(user_command, screenshot)

@@ -358,18 +358,8 @@ class DiscoCoopBot:
                 else:
                     response = "❓ Элемент найден, но координаты недоступны"
             else:
-                # Fallback: используем стандартный LLM подход
-                result = await self.llm_agent.process_command(user_command, screenshot)
-                
-                if result and result.get('actions'):
-                    success = await self.game_controller.execute_actions(result['actions'])
-                    
-                    if success:
-                        response = f"✅ {result.get('description', 'Команда выполнена (LLM)')}"
-                    else:
-                        response = "⚠️ Команда выполнена частично"
-                else:
-                    response = "❓ Не удалось понять команду. Попробуйте переформулировать."
+                # Гибридный анализатор не смог найти элемент
+                response = "❓ Элемент не найден на экране. Попробуйте переформулировать команду."
             
             # Обновляем сообщение с результатом
             await processing_msg.edit_text(response)
