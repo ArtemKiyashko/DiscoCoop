@@ -448,8 +448,9 @@ class LLMAgent:
         try:
             # Конвертируем изображение в base64
             print(f"🖼️  Конвертируем изображение {screenshot.size} в base64...")
+            
             img_buffer = io.BytesIO()
-            screenshot.save(img_buffer, format='JPEG', quality=85)  # JPEG для меньшего размера
+            screenshot.save(img_buffer, format='PNG')  # PNG поддерживает RGBA и лучше по качеству
             img_data = img_buffer.getvalue()
             img_base64 = base64.b64encode(img_data).decode('utf-8')
             
@@ -478,7 +479,7 @@ class LLMAgent:
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/jpeg;base64,{img_base64}"
+                                    "url": f"data:image/png;base64,{img_base64}"
                                 }
                             }
                         ]
