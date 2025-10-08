@@ -23,24 +23,21 @@ Disco Coop - это гибридная система ИИ для автомат
 
 ## Компоненты системы
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Telegram Bot  │◄──►│  HybridAnalyzer  │◄──►│   LLM Agent     │
-│   (disco_bot.py)│    │                  │    │  (agent.py)     │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-         │                        │                       │
-         │                        ▼                       ▼
-         ▼              ┌──────────────────┐    ┌─────────────────┐
-┌─────────────────┐    │ ElementDetector  │    │  External APIs  │
-│ GameController  │    │   (detector.py)  │    │ (OpenAI/Ollama) │
-│ (controller.py) │    └──────────────────┘    └─────────────────┘
-└─────────────────┘              │
-         │                       ▼
-         ▼              ┌──────────────────┐
-┌─────────────────┐    │  ScreenAnalyzer  │
-│  Input System   │    │  (analyzer.py)   │
-│  (PyAutoGUI)    │    └──────────────────┘
-└─────────────────┘
+```mermaid
+graph TB
+    TB[Telegram Bot<br/>disco_bot.py] --> HA[Hybrid Analyzer<br/>hybrid_analyzer.py]
+    HA --> LLM[LLM Agent<br/>agent.py]
+    HA --> ED[Element Detector<br/>detector.py]
+    LLM --> API[External APIs<br/>OpenAI/Anthropic/DeepSeek/Ollama]
+    ED --> SA[Screen Analyzer<br/>screen_analyzer.py]
+    TB --> GC[Game Controller<br/>controller.py]
+    GC --> IS[Input System<br/>PyAutoGUI]
+    
+    style TB fill:#e1f5fe
+    style HA fill:#f3e5f5
+    style LLM fill:#e8f5e8
+    style ED fill:#fff3e0
+    style GC fill:#fce4ec
 ```
 
 ## Детальное описание компонентов
@@ -140,9 +137,15 @@ actions = [
 ```
 
 **Особенности**:
-- Поддержка множественных дисплеев
-- Автоматическое определение игрового окна
+- Поддержка множественных дисплеев (Steam Deck + внешний монитор)
+- Автоматическое определение игрового окна на любом дисплее  
 - Масштабирование координат для разных разрешений
+
+**Обработка координат**:
+1. **Исходные координаты** от детектора элементов
+2. **+ Автоопределенное смещение** дисплея (если игра на внешнем мониторе)
+3. **+ Ручное смещение** из `coordinate_offset` (для тонкой настройки)
+4. **× Масштабирование** согласно `display_scaling`
 
 ### 6. Screen Analyzer (`src/vision/screen_analyzer.py`)
 **Назначение**: Создание и обработка скриншотов
@@ -201,8 +204,12 @@ llm:
 game:
   window_title: "Disco Elysium"
   multi_display:
-    auto_detect_game_screen: true
-    prefer_external_display: true
+    auto_detect_game_screen: true      # Автоопределение дисплея с игрой
+    prefer_external_display: true     # Предпочтение внешнего монитора
+    coordinate_offset:                 # Дополнительное ручное смещение
+      x: 0                            # Добавляется к автоопределенному смещению
+      y: 0                            # Используйте для тонкой настройки
+    display_scaling: 1.0              # Масштабирование координат
 
 telegram:
   bot_token: "YOUR_TOKEN"
